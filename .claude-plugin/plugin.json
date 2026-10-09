@@ -1,0 +1,6 @@
+{
+  "name": "test-porter",
+  "description": "Port legacy tests to a new language's test suite during a language migration (e.g. Perl → Go), one draft PR per file, with a self-growing knowledge base.",
+  "version": "0.1.0",
+  "license": "MIT"
+}
