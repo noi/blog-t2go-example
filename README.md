@@ -8,12 +8,12 @@
 
 ```
 .claude/
-  skills/port-test/        スキル本体（1ファイルを移植する）
+  skills/t2go/        スキル本体（1ファイルを移植する）
     references/            言語非依存の原則・基本のレビュー観点・知見ループの手順
     templates/             プロジェクトプロファイルの雛形
-  skills/port-test-batch/  複数ファイルを並列で移植するコーディネータ
+  skills/t2go-batch/  複数ファイルを並列で移植するコーディネータ
   agents/                  planner / implementer / reviewer
-  port-test/               このリポジトリ用のプロファイル（対応表・落とし穴集など）
+  t2go/               このリポジトリ用のプロファイル（対応表・落とし穴集など）
 internal/todo/             題材の TODO API（Go に移植済み）
 t/feature/                 移植前の Perl E2E テスト
 tests/                     移植後の Go E2E テスト
@@ -41,7 +41,7 @@ go tool golangci-lint run ./...     # lint
 このリポジトリで Claude Code を起動し、スキルを実行します。
 
 ```
-/port-test t/feature/todo.t
+/t2go t/feature/todo.t
 ```
 
 ## ライセンス

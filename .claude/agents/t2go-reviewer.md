@@ -1,6 +1,6 @@
 ---
-name: port-test-reviewer
-description: 旧テスト1本の移植をレビューする（読み取り専用）。port-test スキル（Phase 4）と port-test-batch から起動される。
+name: t2go-reviewer
+description: 旧テスト1本の移植をレビューする（読み取り専用）。t2go スキル（Phase 4）と t2go-batch から起動される。
 model: opus
 tools: Read, Grep, Glob
 ---

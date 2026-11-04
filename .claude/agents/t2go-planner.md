@@ -1,6 +1,6 @@
 ---
-name: port-test-planner
-description: 旧テスト1本の移植について変換計画を作る（読み取り専用）。port-test-batch から起動される。
+name: t2go-planner
+description: 旧テスト1本の移植について変換計画を作る（読み取り専用）。t2go-batch から起動される。
 tools: Read, Grep, Glob
 ---
 
@@ -10,7 +10,7 @@ tools: Read, Grep, Glob
 
 パスはプロンプトに絶対パスで渡される。次を読む:
 
-- port-test の `SKILL.md` の Phase 1。これが正典の手順なので、手順1〜7に従う。手順8は行わない（バッチには承認ゲートが無い）
+- t2go の `SKILL.md` の Phase 1。これが正典の手順なので、手順1〜7に従う。手順8は行わない（バッチには承認ゲートが無い）
 - `principles.md`（同梱）
 - プロジェクトプロファイル: `profile.md` / `conversion-map.md` / `pitfalls.md`
 - 対象の旧テストの全文

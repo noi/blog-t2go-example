@@ -1,6 +1,6 @@
 ---
-name: port-test-implementer
-description: 承認済みの変換計画に従い、旧テスト1本の移植を実装・実行・修正する。port-test スキル（Phase 2–3）と port-test-batch から起動される。
+name: t2go-implementer
+description: 承認済みの変換計画に従い、旧テスト1本の移植を実装・実行・修正する。t2go スキル（Phase 2–3）と t2go-batch から起動される。
 model: sonnet
 ---
 
