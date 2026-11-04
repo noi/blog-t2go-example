@@ -5,7 +5,7 @@ use Exporter 'import';
 use HTTP::Tiny;
 use JSON::PP;
 
-our @EXPORT_OK = qw(create_user api_get api_post);
+our @EXPORT_OK = qw(create_user get post);
 
 my $base = $ENV{TEST_BASE_URL} or die 'TEST_BASE_URL is not set';
 my $http = HTTP::Tiny->new;
@@ -16,13 +16,14 @@ sub create_user {
     return join '-', 'user', $$, ++$seq;
 }
 
-sub api_get {
+# get / post は { status => HTTP ステータス, body => デコードした JSON } を返す。
+sub get {
     my ($user, $path) = @_;
     my $res = $http->get("$base$path", { headers => { 'X-User-Id' => $user } });
     return _decode($res);
 }
 
-sub api_post {
+sub post {
     my ($user, $path, $params) = @_;
     my $res = $http->post("$base$path", {
         headers => { 'X-User-Id' => $user, 'Content-Type' => 'application/json' },
@@ -32,9 +33,9 @@ sub api_post {
 }
 
 sub _decode {
-    my $res = shift;
-    return { http_status => $res->{status} } unless $res->{status} == 200;
-    return $json->decode($res->{content});
+    my $res  = shift;
+    my $body = eval { $json->decode($res->{content}) };
+    return { status => $res->{status}, body => $body };
 }
 
 1;

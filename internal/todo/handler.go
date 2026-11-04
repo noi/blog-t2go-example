@@ -1,5 +1,5 @@
-// Package todo は TODO API の実装。Perl から Go に移植済みで、レスポンスは旧実装の
-// 流儀を引き継ぎ、エラーでも HTTP 200 + 本文の status.ok=0 で返す。
+// Package todo は TODO API の実装。Perl から Go に移植済み。
+// 成否は HTTP ステータスコードで表し、エラー時の本文は {"error": "<メッセージ>"}。
 package todo
 
 import (
@@ -37,27 +37,27 @@ func NewHandler() http.Handler {
 func (s *store) me(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		writeError(w, "login required")
+		writeError(w, http.StatusUnauthorized, "login required")
 		return
 	}
-	writeOK(w, map[string]any{"user": map[string]any{"id": userID}})
+	writeJSON(w, http.StatusOK, map[string]any{"user": map[string]any{"id": userID}})
 }
 
 func (s *store) create(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		writeError(w, "login required")
+		writeError(w, http.StatusUnauthorized, "login required")
 		return
 	}
 	var req struct {
 		Title string `json:"title"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, "invalid request")
+		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 	if req.Title == "" {
-		writeError(w, "title is required")
+		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
 
@@ -67,33 +67,33 @@ func (s *store) create(w http.ResponseWriter, r *http.Request) {
 	s.todos[userID] = append(s.todos[userID], t)
 	s.mu.Unlock()
 
-	writeOK(w, map[string]any{"todo": t})
+	writeJSON(w, http.StatusOK, map[string]any{"todo": t})
 }
 
 func (s *store) list(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		writeError(w, "login required")
+		writeError(w, http.StatusUnauthorized, "login required")
 		return
 	}
 	s.mu.Lock()
 	todos := append([]*Todo{}, s.todos[userID]...)
 	s.mu.Unlock()
 
-	writeOK(w, map[string]any{"todos": todos})
+	writeJSON(w, http.StatusOK, map[string]any{"todos": todos})
 }
 
 func (s *store) done(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		writeError(w, "login required")
+		writeError(w, http.StatusUnauthorized, "login required")
 		return
 	}
 	var req struct {
 		ID int64 `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, "invalid request")
+		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
@@ -102,23 +102,19 @@ func (s *store) done(w http.ResponseWriter, r *http.Request) {
 	for _, t := range s.todos[userID] {
 		if t.ID == req.ID {
 			t.Done = true
-			writeOK(w, map[string]any{"todo": t})
+			writeJSON(w, http.StatusOK, map[string]any{"todo": t})
 			return
 		}
 	}
-	writeError(w, "todo not found")
+	writeError(w, http.StatusNotFound, "todo not found")
 }
 
-func writeOK(w http.ResponseWriter, body map[string]any) {
-	body["status"] = map[string]any{"ok": 1}
-	writeJSON(w, body)
+func writeError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]any{"error": msg})
 }
 
-func writeError(w http.ResponseWriter, msg string) {
-	writeJSON(w, map[string]any{"status": map[string]any{"ok": 0, "error": msg}})
-}
-
-func writeJSON(w http.ResponseWriter, body map[string]any) {
+func writeJSON(w http.ResponseWriter, code int, body map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(body)
 }

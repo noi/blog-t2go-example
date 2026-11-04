@@ -7,14 +7,14 @@
 | Perl（`t/lib/TestUtil.pm`） | Go（`tests/testutil`） | 備考 |
 |---|---|---|
 | `create_user()` | `s.CreateUser()` | どちらもテスト内で一意なユーザー ID を作るだけ。サーバー側の状態は作らない |
-| `api_post($user, $path, $params)` | `user.Post(t, path, params)` | Go 側は HTTP 200 を `require` してから本文（JSON 文字列）を返す |
-| `api_get($user, $path)` | `user.Get(t, path)` | 同上 |
-| 戻り値 `{ http_status => N }`（200 以外） | （対応なし） | Go のヘルパは 200 以外で即失敗する。200 以外を検証したいテストは、まず移植の要否を判断する |
+| `post($user, $path, $params)` | `user.Post(t, path, params)` | Perl は `{ status => HTTP ステータス, body => デコードした JSON }`、Go は `(ステータスコード, 本文の JSON 文字列)` を返す |
+| `get($user, $path)` | `user.Get(t, path)` | 同上 |
 
 ## アサーション規約
 
-- API はエラーでも HTTP 200 で、本文の `status.ok` が 0 になる。他にレスポンスを検証しない呼び出しでは `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())` を置く
-- エラーを期待する呼び出しは `status.ok` = 0 と `status.error` の文言の両方を検証する
+- 成否は HTTP ステータスコードで表す。成功は 200、エラーは 400 / 401 / 404 で、エラー時の本文は `{"error": "<メッセージ>"}`
+- 他にレスポンスを検証しない呼び出しでも、ステータスコードは `require.Equal(t, http.StatusOK, code)` で fatal に検証する
+- エラーを期待する呼び出しは、ステータスコードと `error` の文言の両方を検証する
 
 ## ファイル配置
 
@@ -23,7 +23,7 @@
 
 ## 参照すべき先例
 
-- `tests/me/me_test.go`: `NewServer` → `CreateUser` → `Get` → `status.ok` の fatal ガード、の最小形
+- `tests/me/me_test.go`: `NewServer` → `CreateUser` → `Get` → ステータスコードの fatal ガード、の最小形
 
 ## Perl → Go の一般的な対応
 
@@ -56,8 +56,8 @@
 
 ### レスポンス（JSON）
 
-- Perl の API はエラーでも **HTTP 200 で本文中にステータス**（`status.ok = 0`）を返すことが多い。HTTP コードだけでなく本文のステータスも見る。
-- 他にレスポンスを検証しない呼び出しでは、成功フラグを **fatal で**アサートする: `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())`。
+- Perl の API によっては、エラーでも **HTTP 200 で本文中にステータス**（例: `status.ok = 0`）を返す。その場合は HTTP コードだけでなく本文のステータスも見る。
+- 他にレスポンスを検証しない呼び出しでも、成功の指標（HTTP ステータス、または本文の成功フラグ）を **fatal で**アサートする。
 - gjson:
   - キーが無いとゼロ値の `Result` を返す。`.Int()` / `.String()` / `.Bool()` はゼロ値になる。「無い」ことがバグになる箇所では `.Exists()` を併記する。
   - `path.#` は `path` が無いと 0 を返す。0 件のアサーションには成功ガードが要る。

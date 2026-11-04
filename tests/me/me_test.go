@@ -1,6 +1,7 @@
 package me_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,9 +19,9 @@ func TestMe(t *testing.T) {
 		s := testutil.NewServer(t)
 		user := s.CreateUser()
 
-		res := user.Get(t, "/api/me")
+		code, res := user.Get(t, "/api/me")
 
-		require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())
+		require.Equal(t, http.StatusOK, code)
 		assert.Equal(t, user.UserID(), gjson.Get(res, "user.id").String())
 	})
 }

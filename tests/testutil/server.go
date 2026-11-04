@@ -46,8 +46,8 @@ type Client struct {
 // UserID はクライアントのユーザー ID を返す。
 func (c *Client) UserID() string { return c.userID }
 
-// Post は JSON を POST し、HTTP 200 を確認してから本文を返す。
-func (c *Client) Post(t *testing.T, path string, params any) string {
+// Post は JSON を POST し、HTTP ステータスコードと本文を返す。
+func (c *Client) Post(t *testing.T, path string, params any) (int, string) {
 	t.Helper()
 	body, err := json.Marshal(params)
 	require.NoError(t, err)
@@ -57,15 +57,15 @@ func (c *Client) Post(t *testing.T, path string, params any) string {
 	return c.do(t, req)
 }
 
-// Get は GET し、HTTP 200 を確認してから本文を返す。
-func (c *Client) Get(t *testing.T, path string) string {
+// Get は GET し、HTTP ステータスコードと本文を返す。
+func (c *Client) Get(t *testing.T, path string) (int, string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.s.baseURL+path, http.NoBody)
 	require.NoError(t, err)
 	return c.do(t, req)
 }
 
-func (c *Client) do(t *testing.T, req *http.Request) string {
+func (c *Client) do(t *testing.T, req *http.Request) (int, string) {
 	t.Helper()
 	req.Header.Set("X-User-Id", c.userID)
 	res, err := http.DefaultClient.Do(req)
@@ -73,6 +73,5 @@ func (c *Client) do(t *testing.T, req *http.Request) string {
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, res.Body.Close())
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, res.StatusCode, "body: %s", body)
-	return string(body)
+	return res.StatusCode, string(body)
 }

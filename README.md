@@ -22,7 +22,7 @@ script/prove.sh            Perl のテストを API サーバーに対して実�
 
 ## 題材
 
-`internal/todo` の TODO API は Go に移植済みで、それを検証する E2E テストだけが Perl（`t/feature/todo.t`）のまま残っている、という状況を再現しています。API は旧実装の流儀を引き継ぎ、エラーでも HTTP 200 で本文の `status.ok` を 0 にして返します。
+`internal/todo` の TODO API は Go に移植済みで、それを検証する E2E テストだけが Perl（`t/feature/todo.t`）のまま残っている、という状況を再現しています。成否は HTTP ステータスコードで表し、エラー時の本文は `{"error": "<メッセージ>"}` です。
 
 `t/feature/todo.t` には、本番の移植で実際に遭遇したパターンを再現して仕込んでいます。
 
