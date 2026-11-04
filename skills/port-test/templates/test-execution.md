@@ -1,27 +1,27 @@
-# Test execution
+# テスト実行
 
-## Run one package
+## パッケージを1つ実行する
 
 ```bash
-<command that runs one new test package against the shared dependency stack>
+<共有の依存スタックに対して、新テストのパッケージを1つ実行するコマンド>
 ```
 
-## Long runs
+## 長時間の実行
 
-<How to start a long run detached and poll it in the foreground, e.g. nohup + a bounded wait loop. Background-shell completion notifications are unreliable after an agent is resumed.>
+<長い実行をデタッチして起動し、フォアグラウンドでポーリングする方法。例: nohup と上限付きの待機ループ。エージェントを再開した後は、background シェルの完了通知は当てにならない。>
 
-## Parallel runs (batch)
+## 並列実行（バッチ）
 
-- Isolation between concurrent runs: <e.g. per-test DB namespace>
-- Per-worktree command form: <exact command with unique container/process name>
-- Must not run concurrently with: <e.g. unit tests that wipe a shared index>
+- 同時実行どうしの分離: <例: テストごとの DB 名前空間>
+- worktree ごとのコマンドの形: <一意なコンテナ名・プロセス名を含む正確なコマンド>
+- 同時に走らせてはいけないもの: <例: 共有インデックスを消すユニットテスト>
 
-## Preflight (batch B0)
+## 事前チェック（バッチ B0）
 
-- Dependency stack running: `<command>`
-- Disk space: `<command>`, ask before cleanup below `<threshold>`
-- Leftover test data: `<command>`, ask before cleanup above `<threshold>`
+- 依存スタックが動いているか: `<コマンド>`
+- ディスクの空き: `<コマンド>`。`<しきい値>` を下回ったら掃除の前に確認する
+- テストデータの残骸: `<コマンド>`。`<しきい値>` を超えたら掃除の前に確認する
 
-## Troubleshooting
+## トラブルシューティング
 
-<lint lock contention, stale lint caches pointing at deleted worktrees, …>
+<lint のロック競合、削除済み worktree を指す古い lint キャッシュ、…>

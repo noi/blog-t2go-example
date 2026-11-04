@@ -1,29 +1,29 @@
-# PR body
+# PR 本文
 
 ```markdown
-## Background
+## 背景
 
-Migration of tests from <legacy> to <new>.
+<旧言語> から <新言語> へのテスト移行。
 
-## Changes
+## 変更内容
 
-Ported `<legacy test path>` to `<new test path>`.
+`<旧テストのパス>` を `<新テストのパス>` に移植した。
 
-| Legacy case | Result | New test / evidence |
+| 旧ケース | 対応 | 新テスト / 根拠 |
 |---|---|---|
-| <name> | Port | <new test name> |
-| <name> | Merge | <target test name> |
-| <name> | Omit: covered | <file + test name> |
-| <name> | Omit: obsolete | <reason> |
+| <名前> | 移植 | <新テスト名> |
+| <名前> | 統合 | <統合先のテスト名> |
+| <名前> | 省略（既存カバレッジ） | <ファイル名 + テスト名> |
+| <名前> | 省略（形骸化） | <理由> |
 
-## Verification
+## 動作確認
 
-CI.
+CI の成功をもって動作確認とする。
 
-## Notes
+## 補足
 
-Generated with the port-test skill. <Differences from the legacy test and why.>
+port-test スキルで生成。<旧テストとの差分とその理由>
 ```
 
-- Write the table for human reviewers; it can come straight from the plan.
-- Title: `port: <legacy test path>` (full path; basenames collide).
+- 表は人間のレビュアーが読む前提で書く。計画からそのまま流用できる
+- タイトル: `port: <旧テストのパス>`（basename だけだと同名ファイルと区別できないのでフルパス）

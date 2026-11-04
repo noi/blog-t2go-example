@@ -1,38 +1,38 @@
-# Review checklist (base)
+# レビュー観点（基本）
 
-Project-specific points live in the project profile's `review-checklist.md`; read both. Classify findings as `[must]` (must fix), `[imo]` (recommended), `[nits]` (trivial) or `[ask]` (question). Background for each point: `principles.md`.
+プロジェクト固有の観点はプロジェクトプロファイルの `review-checklist.md` にあるので、両方を読む。指摘は `[must]`（修正必須）/ `[imo]`（推奨）/ `[nits]`（些末）/ `[ask]`（質問）に分類する。各観点の背景は `principles.md` を参照。
 
-## Coverage
+## カバレッジ
 
-- [must] **Every legacy test case is accounted for.** It is either ported, merged (name the target), or omitted with a reason recorded *in the new test file*. A missing case without a recorded reason is a finding.
-- For "omit: covered", the substitute test exists and actually checks the same thing. Open it.
-- Merged cases did not lose any of their checks.
+- [must] **旧テストのケースが全て説明できるか。** 移植、統合（統合先を示す）、または理由を*新テストのファイルに*記録した省略のいずれかになっていること。理由の記録が無いまま欠けているケースは指摘する。
+- 「省略（既存カバレッジあり）」の代替テストが実在し、実際に同じことを検証しているか。開いて確かめる。
+- 統合したケースの検証項目が抜けていないか。
 
-## Assertion strength
+## アサーションの強さ
 
-- [must] **For each assertion, can you say what broken behavior it would catch?** Watch for the four shapes in `principles.md` §4: filter = expectation, a count that cannot change, half of an AND, and a baseline taken through a different path or actor.
-- Every API call whose response is otherwise unchecked asserts at least its success indicator, **fatally**. Re-derive this for every call yourself; do not accept the plan's classification. The only exemptions are calls expected to fail and setup unrelated to the behavior under test. A call that drives the state transition under test is not "setup".
-- Preconditions and values that later checks depend on use the fatal form.
-- No assertion depends on an order the system does not guarantee.
-- Negative checks (0 results, 404, "not visible") have a positive baseline through **the same actor and the same path**.
-- Where the new language reads "missing" as a zero value, existence is asserted too.
-- Expected values can be derived from the setup.
-- A strengthening of a dead legacy check has a reason comment.
+- [must] **各アサーションについて、どんな壊れ方を捕まえるのか言えるか。** `principles.md` §4 の4つの形に注意する: 絞り込み条件 = 期待値、変わり得ない件数、AND の片側だけ、別の経路や主体で取ったベースライン。
+- 他にレスポンスを検証しない API 呼び出しが全て、少なくとも成功の指標を **fatal で**アサートしているか。呼び出しごとに自分で判定し直す。計画の分類を追認しない。対象外は、失敗を期待する呼び出しと、テスト対象の振る舞いと無関係なセットアップだけ。テスト対象の状態遷移を駆動する呼び出しは「セットアップ」ではない。
+- 前提条件と、後続の検証が依存する値が fatal 形になっているか。
+- システムが保証しない順序に依存したアサーションが無いか。
+- 否定の検証（0 件・404・「見えない」）に、**同じ主体・同じ経路での**正のベースラインがあるか。
+- 新言語で「無い」がゼロ値として読める箇所で、存在もアサートしているか。
+- 期待値がセットアップから導出できるか。
+- 死んでいた旧テストの検証を強化した箇所に、理由のコメントがあるか。
 
-## Explanations
+## 説明責任
 
-- Calls the legacy test did not make (extra daemon runs, fixed clocks, manual inserts) have a "why" comment.
-- Explicit version, locale or header values that the legacy harness sent implicitly have a "why" comment.
-- [must] **Every symbol, file path and constant named in a comment exists, and every stated cause holds in the implementation.** Trace it. Wrong causal comments pass CI and were the largest source of `[must]` findings.
+- 旧テストに無かった呼び出し（デーモンの追加実行・時刻の固定・手動 INSERT）に「なぜ」のコメントがあるか。
+- 旧基盤が暗黙に送っていたバージョン・ロケール・ヘッダを明示した箇所に「なぜ」のコメントがあるか。
+- [must] **コメントに書かれた記号名・ファイルパス・定数が全て実在し、書かれた因果が実装で成り立っているか。** 実装まで追う。誤った因果コメントは CI を通り、`[must]` 指摘の最大の発生源だった。
 
-## Code conventions
+## コード規約
 
-- Layout follows the project's rules (by default, one package per port). Fixtures are referenced, not duplicated.
-- When appending to an existing package, new helpers have names specific to the feature, to avoid collisions with parallel PRs. **If you cannot tell which helpers are new, ask (`[ask]`); do not guess.**
-- Comments explain only non-obvious "why". They do not reference the plan, knowledge files, review numbers, line numbers or the deleted legacy file.
-- Project coding rules (see the project profile).
+- 配置がプロジェクトの規約に従っているか（既定では移植ごとに1パッケージ）。フィクスチャを複製せず参照しているか。
+- 既存パッケージへの追記では、並走する PR との衝突を避けるため、新しいヘルパが機能固有の名前になっているか。**どのヘルパが新規か判別できなければ、推測せず `[ask]` で確認する。**
+- コメントが自明でない「なぜ」だけを説明しているか。計画・知見ファイル・レビュー番号・行番号・削除される旧ファイルを参照していないか。
+- プロジェクトのコーディング規約（プロジェクトプロファイルを参照）。
 
-## Finishing (not for the reviewer: checked by Phase 5 before commit)
+## 仕上げ（reviewer は対象外。Phase 5 でコミット前に確認する）
 
-- The legacy test file is deleted.
-- No profile or knowledge files are in the port diff.
+- 旧テストファイルが削除されているか。
+- プロファイルや知見ファイルが移植の差分に入っていないか。

@@ -1,132 +1,132 @@
 ---
 name: port-test
-description: Port one legacy test file to the new language's test suite during a language migration (e.g. Perl → Go). Runs plan → implement → test → review → finish with model routing, and ends with a labeled draft PR plus a knowledge-base update.
-argument-hint: "<legacy test file> [-k <knowledge-branch>] | init"
+description: 言語移行（例: Perl → Go）で、旧言語のテスト1ファイルを新言語のテストスイートへ移植する。計画→実装→テスト→レビュー→仕上げをモデル振り分け付きで実行し、ラベル付きドラフト PR の作成と知見の還元まで行う。
+argument-hint: "<旧テストファイル> [-k <知見ブランチ>] | init"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-# port-test: port one legacy test to the new stack
+# port-test（旧テスト1本を新しいスタックへ移植する）
 
-Target: $ARGUMENTS
+対象: $ARGUMENTS
 
-One run handles **one legacy test file = one PR**. The goal is a **draft PR with the project's port label**, plus any new knowledge fed back into the project profile.
+1回の実行で扱うのは**旧テスト1ファイル（= 1PR）**。ゴールは、プロジェクトの移植ラベルを付けた**ドラフト PR の作成**と、新しく分かった知見のプロファイルへの還元。
 
-This skill is the *workflow*. What the project knows about its own migration lives in the **project profile**, a directory in the target repository (default `.claude/test-porter/`):
+本スキルが持つのは**ワークフロー**だけ。移行についてプロジェクトが知っていることは、対象リポジトリ内の**プロジェクトプロファイル**（既定 `.claude/port-test/`）に置く。
 
-| File | Content | Grows by |
+| ファイル | 内容 | 更新のされ方 |
 |---|---|---|
-| `profile.md` | Paths, commands, branch/label conventions, how to tell legacy from migrated components | Edited by humans |
-| `conversion-map.md` | Legacy → new idiom map, helper map, assertion conventions, file layout, reference examples | Knowledge loop |
-| `pitfalls.md` | Pitfalls actually hit (only real ones) | Knowledge loop |
-| `test-execution.md` | How to run the new tests locally, in parallel, and how to debug | Knowledge loop |
-| `review-checklist.md` | Project-specific review points (added to the bundled checklist) | Knowledge loop |
-| `pr-template.md` | PR body format | Edited by humans |
+| `profile.md` | パス・コマンド・ブランチ/ラベル規約・依存先が旧実装か移行済みかの判定方法 | 人が編集 |
+| `conversion-map.md` | 旧→新の対応表・ヘルパ対応・アサーション規約・ファイル配置・参照すべき先例 | 知見ループ |
+| `pitfalls.md` | 落とし穴集（実際に踏んだものだけ） | 知見ループ |
+| `test-execution.md` | 新テストの実行方法・並列実行・トラブルシューティング | 知見ループ |
+| `review-checklist.md` | プロジェクト固有のレビュー観点（同梱の基本観点に追加する） | 知見ループ |
+| `pr-template.md` | PR 説明のフォーマット | 人が編集 |
 
-Bundled, project-independent references (read-only):
+同梱の references（プロジェクト非依存・読み取り専用）:
 
-- `${CLAUDE_SKILL_DIR}/references/principles.md`: porting principles (read in Phase 1 and by every agent)
-- `${CLAUDE_SKILL_DIR}/references/review-checklist.md`: base review checklist
-- `${CLAUDE_SKILL_DIR}/references/knowledge-loop.md`: how to feed knowledge back (Phase 5, step 5)
-- `${CLAUDE_SKILL_DIR}/templates/`: profile templates for `init`
+- `${CLAUDE_SKILL_DIR}/references/principles.md`: 移植の原則（Phase 1 と全エージェントが読む）
+- `${CLAUDE_SKILL_DIR}/references/review-checklist.md`: 基本のレビュー観点
+- `${CLAUDE_SKILL_DIR}/references/knowledge-loop.md`: 知見の還元手順（Phase 5 手順5）
+- `${CLAUDE_SKILL_DIR}/templates/`: `init` 用のプロファイル雛形
 
-## Arguments
+## 引数の解釈
 
-- `init`: scaffold the project profile (see "Init" below) and stop.
-- `-k <name>` / `-k<name>`: knowledge branch name. If omitted, ask in Phase 5.
-- A flag written with a space **consumes the next word as its value** (`-k foo`: `foo` is not a file).
-- Every other argument is the target legacy test path. If it does not match `legacy_test_glob` in `profile.md`, **stop with an error**. Do not silently reinterpret a typo.
-- No target: ask the user.
+- `init`: プロジェクトプロファイルを作成して終了する（後述「Init」）
+- `-k <name>` / `-k<name>`: 知見ブランチ名（省略時は Phase 5 で確認する）
+- スペース区切りで書かれたフラグは、**直後の1語をその値として消費する**（`-k foo` の `foo` はファイルではない）
+- それ以外の引数が対象の旧テストのパス。`profile.md` の `legacy_test_glob` に合わなければ**エラーとして止める**（打ち間違いを黙って別の意味に解釈しない）
+- 対象が無ければユーザーに確認する
 
-## Phase 0: load the profile
+## Phase 0: プロファイルの読み込み
 
-1. Find the profile: `$CLAUDE_PROJECT_DIR/.claude/test-porter/profile.md`, or the directory named in the project's `CLAUDE.md` under "test-porter profile".
-2. If it is missing, offer to run **Init**. Do not guess project conventions.
-3. Read `profile.md` fully. All `<placeholders>` below (`<base>`, `<label>`, `<lint>`, …) come from it.
+1. プロファイルを探す: `$CLAUDE_PROJECT_DIR/.claude/port-test/profile.md`、またはプロジェクトの `CLAUDE.md` に「port-test プロファイル」として書かれた場所
+2. 無ければ **Init** の実行を提案する。プロジェクトの規約を推測で埋めない
+3. `profile.md` を全文読む。以下の `<placeholder>`（`<base>` / `<label>` / `<lint>` 等）はすべてここから取る
 
-## Phases and model routing
+## フェーズ構成とモデル振り分け
 
-| Phase | Work | Who |
+| Phase | 内容 | 実行主体 |
 |---|---|---|
-| 1 | Inventory & conversion plan | Main session (session model) |
-| 2 | Implement | Agent `port-test-implementer` (sonnet) |
-| 3 | Run tests & fix loop | Same implementer, continued via SendMessage |
-| 4 | Review | Agent `port-test-reviewer` (opus, read-only) |
-| 5 | Finish, PR, knowledge loop | Main session |
+| 1 | 棚卸し・変換計画 | メインセッション（セッションモデル） |
+| 2 | 実装 | サブエージェント `port-test-implementer`（sonnet） |
+| 3 | テスト実行・修正ループ | 同上（SendMessage で継続） |
+| 4 | レビュー | サブエージェント `port-test-reviewer`（opus・読み取り専用） |
+| 5 | 仕上げ・PR 作成・知見還元 | メインセッション |
 
-- Models are set only in the agents' frontmatter (aliases such as `sonnet`/`opus`, never full model IDs). To change the routing, edit those files only.
-- Phases 1 and 5 hold the judgment, so they follow the session model (`/model`).
-- When installed as a plugin, agents are namespaced (`test-porter:port-test-implementer`). If the agents are unavailable, run every phase in the main session, reading the references directly. **The quality of judgment comes from the references, not from the agents.**
-- Agents do not inherit this skill's directory. **Always pass absolute paths** to the profile and to `${CLAUDE_SKILL_DIR}/references/*` in agent prompts.
+- モデル指定はエージェント定義の frontmatter だけに書く（`sonnet` / `opus` 等のエイリアス。フルモデル ID は書かない）。振り分けを変えたいときはそこだけ直す
+- Phase 1/5 は判断の中核なので、セッションモデル（`/model` の選択）に追従させる
+- プラグインとして入れた場合、エージェントは名前空間付きになる（`blog-t2go-example:port-test-implementer`）。エージェントが使えない環境では、references を直接読んで全フェーズをメインセッションで実行してよい。**判断の質はエージェントではなく references の記述で担保する**
+- エージェントは本スキルのディレクトリを引き継がない。**プロファイルと `${CLAUDE_SKILL_DIR}/references/*` は、必ず絶対パスでプロンプトに渡す**
 
-## Phase 1: inventory & plan (main session)
+## Phase 1: 棚卸し・変換計画（メインセッション）
 
-1. Read the target legacy test closely and list **every** test case.
-2. For each component the test depends on (endpoint, daemon/worker, factory), decide whether it is **legacy or migrated**, using the method in `profile.md` (routing config, service registry, …). This determines which helper to call (e.g. "call the new handler" or "call through the legacy bridge"). Use the legacy bridge only for components still implemented in the legacy stack. Do not use it as a shortcut for setup.
-3. Check legacy factory side effects. Decide whether each one represents real production behavior that the new setup must reproduce.
-4. Classify each case: **port / merge / omit: covered / omit: obsolete** (`principles.md` §2). For "omit: covered", **open the substitute test and confirm that it exists and checks the same thing.**
-5. Decide how mocks become observations of real effects (`principles.md` §3, `conversion-map.md`).
-6. Read `pitfalls.md` and work the relevant items into the plan.
-7. Decide the output location using the layout rules in `conversion-map.md`. Default: a **new package per port**. Append to an existing file only when the rules say so.
-8. Present the **conversion plan** and get approval before Phase 2. The plan contains: the classification table, legacy/new mapping, how differences are absorbed, the output location, and open questions. If the user's environment may forbid pushing, ask about push permission now, in one line.
+1. 対象の旧テストを精読し、テストケース（subtest / `it` ブロック / テスト関数）を**全て**列挙する
+2. テストが依存するコンポーネント（エンドポイント・デーモン/ワーカー・factory）ごとに、**旧実装のままか移行済みか**を `profile.md` の判定方法（ルーティング設定・サービスレジストリ等）で判定する。これで呼ぶべきヘルパ（新実装を直接呼ぶか、旧スタックへのブリッジ経由か）が決まる。ブリッジは旧スタックにしか無いコンポーネントに限って使い、セットアップの近道に使わない
+3. 旧 factory の副作用を確認し、それぞれが本番の挙動として新しいセットアップでも再現すべきものかを判断する
+4. 各ケースを **移植 / 統合 / 省略（既存カバレッジあり）/ 省略（形骸化）** に分類する（`principles.md` §2）。「省略（既存カバレッジあり）」は、**代替テストを開いて、実在し同じことを検証していることを確認する**
+5. mock を実際の作用の観測に置き換える方針を決める（`principles.md` §3、`conversion-map.md`）
+6. `pitfalls.md` を読み、該当する落とし穴を計画に織り込む
+7. 出力先を `conversion-map.md` のファイル配置規約で決める。既定は**移植ごとに新しいパッケージを作る**こと。既存ファイルへの追記は規約がそう定める場合だけ
+8. **変換計画**を提示し、承認を得てから Phase 2 へ進む。計画に含めるもの: 分類表・旧/新の対応・差分の吸収方針・出力先・未決事項。ユーザーの環境で push が禁止されている可能性があれば、ここで push 可否を一言確認しておく
 
-## Phase 2: implement (port-test-implementer)
+## Phase 2: 実装（port-test-implementer）
 
-Start the implementer agent. The prompt must contain:
+implementer を起動する。プロンプトに必ず含めるもの:
 
-- The absolute paths of the target test, the output location, the profile directory, and `${CLAUDE_SKILL_DIR}/references/principles.md`.
-- The full approved plan.
-- "If you find a fact that contradicts the plan, do not absorb it in the implementation. Report and wait."
-- "Do not copy causal explanations from the plan into code comments. Verify them in the implementation first, or leave them out."
+- 対象テスト・出力先・プロファイルのディレクトリ・`${CLAUDE_SKILL_DIR}/references/principles.md` の絶対パス
+- 承認済みの計画の全文
+- 「計画と矛盾する事実を見つけたら、実装で吸収せず報告して指示を待つこと」
+- 「計画に書かれた因果の説明をコードコメントに転記しないこと。実装で自分で確認してから書くか、書かないこと」
 
-## Phase 3: test & fix loop (same implementer)
+## Phase 3: テスト実行・修正ループ（implementer を継続）
 
-Continue the same implementer via SendMessage, following `test-execution.md`.
+SendMessage で同じ implementer に `test-execution.md` の手順でテストと修正を続けさせる。
 
-- Any fix that changes the plan must come back to the main session: adding an omission, weakening an assertion, or changing production code. Ask the user if in doubt.
-- Done means **all tests pass and the project's lint entry point (`<lint>`) reports zero findings.**
+- 計画を変える修正（省略の追加・アサーションの弱化・プロダクションコードの変更）はメインセッションに戻して判断する。迷ったらユーザーに確認する
+- 完了条件は、**テストが全て通り、プロジェクトの lint（`<lint>`）が 0 件**であること
 
-## Phase 4: review (port-test-reviewer)
+## Phase 4: レビュー（port-test-reviewer）
 
-Start the reviewer with: the target test path, the new file paths, the plan, and the names of newly added test cases and helpers (essential when appending to an existing file).
+reviewer を起動し、対象テストのパス・新しいファイルのパス・計画・今回追加したテストケースとヘルパの名前（既存ファイルへの追記では必須）を渡す。
 
-- **The reviewer has only Read/Grep/Glob.** Do not ask it to run `git diff`. Run it yourself and paste the output. Pass new untracked files as paths.
-- **Feed it what it cannot obtain itself:** test results, types confirmed by measurement, the history of fixes. Without these it can only say "verify against the real response".
-- Tell it that stray files in the diff are out of scope; Phase 5 checks those.
-- Always include the focus line: "check that every symbol, path and constant mentioned in comments exists, and trace each stated cause into the implementation". This is the main defense against wrong-but-green comments (`principles.md` §7).
-- `[must]`: **verify it against the actual file first**, then send it back to the implementer. State *what* must be achieved and let the implementer choose *how*. A fix the reviewer proposes can turn out to be impossible.
-- `[imo]` / `[ask]`: decide in the main session; ask the user when unsure.
-- If the review quotes code or line numbers that do not match the file, it was based on a stale read. Wait for a second notification before acting.
+- **reviewer は Read / Grep / Glob しか持たない**。`git diff` を実行させる形で頼まない。メインセッションが実行して出力を貼る。未追跡の新規ファイルはパスで渡す
+- **reviewer が自分では得られない情報を渡す**: テスト結果、実測で確定した型、修正の経緯。これが無いと「実際のレスポンスで確認せよ」という一般論しか返らない
+- 差分への余計なファイルの混入は担当外と伝える（Phase 5 で確認する）
+- 重点観点として毎回この一文を入れる: 「コメント中の記号名・パス・定数が実在するか確認し、書かれた因果を実装まで追え」。緑のまま通る誤ったコメント（`principles.md` §7）への主な防御になる
+- `[must]`: **まず実ファイルで裏取りしてから** implementer に差し戻す。伝えるのは「何を達成すべきか」までで、方法は implementer に選ばせる（reviewer の提案した直し方が実行不能なことがある）
+- `[imo]` / `[ask]`: メインセッションで採否を判断する。迷ったらユーザーに確認する
+- レビューが引用するコード片や行番号が実ファイルと合わなければ、古い状態を読んだ結果。動く前に2通目の通知を待つ
 
-## Phase 5: finish & PR (main session)
+## Phase 5: 仕上げ・PR 作成（メインセッション）
 
-Steps 1–4 run without asking for approval. **This exemption covers only the port PR this skill creates.** It does not extend to any other commit or push.
+手順 1〜4 は承認を求めずに実行する。**この承認不要は本スキルが作る移植 PR に限った話**で、他のコミットや push には広げない。
 
-1. Delete the legacy test file (and fixtures used only by it; grep to confirm).
-2. Run `<lint>` until it reports zero findings.
-3. Commit on a branch named per `profile.md`. If you are on `<base>`, create the branch first.
-   - **Before committing, inspect `git status --porcelain`.** This is the only checkpoint before an unapproved push. Check:
-     - (a) Only the files the plan expects are present.
-     - (b) **The legacy test deletion is included.**
-     - (c) No profile files are included; knowledge goes on its own branch.
-     - (d) The lint auto-fixer did not touch unrelated files.
+1. 旧テストファイルを削除する（そのテストからしか使われないフィクスチャも。grep で確認する）
+2. `<lint>` を 0 件になるまで回す
+3. `profile.md` の命名規約のブランチにコミットする。`<base>` 上にいたら先にブランチを切る
+   - **コミット前に `git status --porcelain` を確認する。** 承認なしの push の前に差分を押さえる唯一の地点。確認すること:
+     - (a) 計画どおりのファイルだけが載っているか
+     - (b) **旧テストの削除が差分に入っているか**
+     - (c) プロファイル（知見ファイル）が混ざっていないか。知見は別ブランチに積む
+     - (d) lint の自動修正が無関係なファイルを書き換えていないか
 
-     Revert anything unexpected. Tracked files: `git checkout --`. Untracked files: `rm`.
-   - The commit message equals the PR title in `profile.md` (default `port: <legacy test path>`).
-4. Write the PR body per `pr-template.md` into the scratchpad. Push, then run `gh pr create --draft --base <base> --label <label> --title ... --body-file ...`. Report the URL.
-   - **If push or PR creation is blocked by permissions, do not retry or work around it.** Stop at the commit and report the branch name and the exact commands to run.
-   - Do not add "ready for review" labels; the human does that when un-drafting.
-5. **Knowledge loop:** if anything new was learned, follow `${CLAUDE_SKILL_DIR}/references/knowledge-loop.md`. Knowledge goes to a separate knowledge branch and never into the port PR. Skip this step if nothing new was learned.
+     想定外は戻す。追跡済みは `git checkout --`、未追跡は `rm`
+   - コミットメッセージは `profile.md` の PR タイトルと同じにする（既定 `port: <旧テストのパス>`）
+4. `pr-template.md` に従って PR 本文をスクラッチパッドに書き、push して `gh pr create --draft --base <base> --label <label> --title ... --body-file ...` を実行する。PR の URL を報告する
+   - **push や PR 作成が権限で弾かれたら、リトライも回避もしない。** コミットまでで止め、ブランチ名と実行すべきコマンドをそのまま報告する
+   - レビュー依頼のラベルは付けない（ドラフト解除時に人が付ける）
+5. **知見ループ**: 新しく分かったことがあれば `${CLAUDE_SKILL_DIR}/references/knowledge-loop.md` に従う。知見は別の知見ブランチに積み、移植 PR には含めない。新しい知見が無ければこの手順は飛ばす
 
 ## Init
 
-Scaffold `.claude/test-porter/` from `${CLAUDE_SKILL_DIR}/templates/`:
+`${CLAUDE_SKILL_DIR}/templates/` から `.claude/port-test/` を作る。
 
-1. Ask for the language pair and the legacy/new test locations. Inspect the repository to propose values (test runner, lint command, base branch, routing config) rather than asking blindly.
-2. Copy the templates and fill in `profile.md`.
-3. If the plugin ships an example for the language pair (`${CLAUDE_SKILL_DIR}/../../examples/<pair>/`), offer to seed `conversion-map.md` / `pitfalls.md` from it.
-4. Recommend porting **2–4 files by hand or with close supervision first**. Then mine their review comments into `conversion-map.md` and `review-checklist.md`; that is the best initial knowledge base.
+1. 言語ペアと、旧/新テストの場所を確認する。いきなり質問するのではなく、リポジトリを調べて候補を提示する（テストランナー・lint コマンド・ベースブランチ・ルーティング設定）
+2. 雛形をコピーし、`profile.md` を埋める
+3. 言語ペアに対応する例（`${CLAUDE_SKILL_DIR}/../../examples/<pair>/`）があれば、`conversion-map.md` / `pitfalls.md` の初期値にするか提案する
+4. **最初の 2〜4 ファイルは手で、または人がよく見ながら移植する**ことを勧める。そのレビュー指摘を `conversion-map.md` と `review-checklist.md` に起こすのが、最良の初期知見になる
 
-## Batch mode
+## バッチ実行
 
-`port-test-batch` runs this workflow over many files in parallel worktrees. Where it gives different instructions, **the batch skill wins**. The main differences: the plan comes from `port-test-planner` and has no approval gate, Phases 2 and 3 run in a single launch, branches are `port/<slug>`, and agents report knowledge candidates instead of editing the profile.
+`port-test-batch` は、このワークフローを複数ファイルに対して並列の worktree で回す。指示が食い違う場合は**バッチ側が優先する**。主な違い: 計画は `port-test-planner` が作り承認ゲートは無い / Phase 2 と 3 を1回の起動で完走させる / ブランチは `port/<slug>` / エージェントはプロファイルを編集せず知見候補を報告する。

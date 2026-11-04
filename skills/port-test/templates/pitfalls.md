@@ -1,15 +1,15 @@
-# Pitfalls
+# 落とし穴
 
-Only things actually hit in this project. Each entry: **symptom** (what you would search for) → cause → fix. Correct entries that turn out to be wrong, and say so.
+このプロジェクトで実際に踏んだものだけを書く。各項目: **症状**（検索するときの言葉）→ 原因 → 対処。誤りと分かった項目は訂正し、訂正したことも書く。
 
-## Harness defaults
+## テスト基盤の既定値
 
-## Types and serialization
+## 型とシリアライズ
 
-## Time and caching
+## 時刻とキャッシュ
 
-## Async / queues / workers
+## 非同期 / キュー / ワーカー
 
-## Legacy bridge
+## 旧スタックへのブリッジ
 
-## Lint
+## lint

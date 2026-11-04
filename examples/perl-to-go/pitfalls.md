@@ -1,44 +1,44 @@
-# Pitfalls: Perl → Go test ports
+# 落とし穴: Perl → Go のテスト移植
 
-Generic entries from a real migration of ~260 Perl feature test files. Project-specific entries were removed. Format: **symptom** → cause → fix.
+Perl の feature テスト約260ファイルの実際の移行から、汎用的な項目を抜き出したもの。プロジェクト固有の項目は除いてある。形式: **症状** → 原因 → 対処。
 
-## Harness defaults
+## テスト基盤の既定値
 
-- **Times are off by 9 hours (or by your offset) only in the Go port.** The Perl factory sent a time zone header by default, so legacy test users had a time zone. The Go harness leaves it empty, and Go's `time.LoadLocation("")` returns **UTC without an error**, so the "fallback on error" path never runs. Set the time zone explicitly, with a reason comment.
-- **A branch that "obviously" runs in production is skipped in the port.** The legacy harness sent a default locale, user agent, client version or network type. Diff the implicit request headers of both harnesses once, and record the result in the conversion map.
+- **Go の移植でだけ時刻が9時間（またはそのタイムゾーンの差分）ずれる。** Perl の factory は既定でタイムゾーンのヘッダを送っていたので、旧テストのユーザーにはタイムゾーンがあった。Go の基盤では空のままで、Go の `time.LoadLocation("")` は**エラーなしで UTC を返す**ため、「エラーならフォールバック」の経路が動かない。タイムゾーンを明示し、理由をコメントに書く。
+- **本番では「当然」通る分岐が、移植では飛ばされる。** 旧基盤が既定のロケール・ユーザーエージェント・クライアントバージョン・ネットワーク種別を送っていた。両基盤の暗黙のリクエストヘッダを一度比べ、結果を対応表に記録する。
 
-## Types
+## 型
 
-- **The Go assertion fails with `"1883" != 1883`, or the reverse.** Perl JSON types depend on where the value came from: DB accessor → string, literal or config → number. `cmp_deeply` compares loosely, so the legacy expected value proves nothing. Measure on the first run.
-- **The same field is written as `'5+'` in one place and `1` in another in the `.t`.** Don't assume the Go types differ. Find the presenter/serializer that produces both fields. If one function produces them, the type is consistent.
-- **A field expected to be 0 always passes.** It may be the string `"0"`, missing, or null. `.Uint()` returns 0 for all three. Assert the type (`Type == gjson.String`) together with the value.
+- **Go のアサーションが `"1883" != 1883`（またはその逆）で落ちる。** Perl の JSON の型は値の出どころで決まる: DB のアクセサ由来 → 文字列、リテラルや設定由来 → 数値。`cmp_deeply` は緩く比較するので、旧テストの期待値は何も証明しない。初回の実行で実測する。
+- **`.t` の中で同じフィールドが、ある箇所では `'5+'`、別の箇所では `1` と書かれている。** Go 側の型が違うと決めつけない。両方のフィールドを作る presenter / シリアライザを探す。1つの関数が作っているなら、型は一貫している。
+- **0 を期待するフィールドが常に通る。** 文字列の `"0"`、キー不在、null のどれかかもしれない。`.Uint()` はこの3つ全てで 0 を返す。値と一緒に型（`Type == gjson.String`）もアサートする。
 
-## Dead legacy checks (strengthen and comment)
+## 死んでいた旧テストの検証（強化してコメントを残す）
 
-- `is $a->{user_id}, $b->{user_id}`, where neither response has a top-level `user_id`: undef equals undef, so it always passes. Map it to the field that really exists.
-- `ignore` without a trailing comma swallows every following key/value pair as its arguments. Perl gives no warning. Many fields were never checked.
-- `subbagof` with a list of expected elements passes on an empty result. One port found that the seed data had changed and the real result had been empty for a long time.
-- A factory that calls APIs and ignores their status: the setup failed, and the test was still green. A fatal guard in Go makes the failure visible for the first time.
+- `is $a->{user_id}, $b->{user_id}` で、どちらのレスポンスにもトップレベルの `user_id` が無い: undef 同士なので常に通る。実在するフィールドに対応付ける。
+- 末尾のカンマが無い `ignore` は、後続のキーと値を全て引数として飲み込む。Perl は警告を出さない。多くのフィールドが一度も検証されていなかった。
+- 期待要素を列挙した `subbagof` は、空の結果で通る。ある移植では、シードデータが変わって実際の結果が長いこと空だったことが判明した。
+- API を呼んでそのステータスを無視する factory: セットアップは失敗していたのに、テストは緑だった。Go で fatal のガードを置くと、初めて失敗が見える。
 
-## Async and processes
+## 非同期とプロセス
 
-- **Don't call a helper that can `t.Fatal` from inside a `require.Eventually` condition.** testify runs the condition in another goroutine. `FailNow` there violates the `testing` contract: the goroutine exits, and the real error is hidden behind "Condition never satisfied". Also, the timer takes priority over a slow condition that is still running, so a condition that takes seconds can time out after it has already succeeded. Write a deadline loop in the test goroutine instead.
-- **Each call into the legacy stack is a new process.** Mocks, sessions and the mocked clock do not carry over between calls. If the legacy test wrapped "get → post → get → retry" in one mock scope, embed the whole sequence in one legacy call.
-- **The legacy bridge reports success for a script that used Test::More.** `ok`/`is`/`cmp_deeply` inside a generated script without a plan exits with 254 ("no plan was declared"), or behaves unexpectedly. Use `die ... unless ...` in snippets. For large comparisons, `print encode_json(...)` and assert in Go. Cast types explicitly on the Perl side (`int($x)` / `''.$x`).
-- **A web test client with auto-check disabled does not die on a 500 or a login redirect.** An error page parsed as JSON yields zero values, and a 0-count assertion passes. Guard with `require.True(t, gjson.Valid(res))`.
+- **`require.Eventually` の条件の中から、`t.Fatal` しうるヘルパを呼ばない。** testify は条件を別の goroutine で実行する。そこでの `FailNow` は `testing` の契約違反で、その goroutine は終了し、本当のエラーは「Condition never satisfied」の陰に隠れる。さらに、実行中の遅い条件よりタイマーが優先されるので、数秒かかる条件は、既に成功した後でタイムアウトすることがある。代わりに、テスト goroutine 内で deadline ループを書く。
+- **旧スタックへの呼び出しは毎回新しいプロセス。** mock・セッション・モック時刻は呼び出し間で引き継がれない。旧テストが「取得 → 送信 → 取得 → retry」を1つの mock スコープで包んでいたなら、その一連を1回の旧スタック呼び出しに丸ごと埋め込む。
+- **Test::More を使ったスクリプトでも、ブリッジは成功と報告する。** plan の無い生成スクリプト内の `ok` / `is` / `cmp_deeply` は exit 254（「no plan was declared」）で終わるか、予期しない動きをする。スニペット内では `die ... unless ...` を使う。大きな比較は `print encode_json(...)` して Go 側でアサートする。型は Perl 側で明示的にキャストする（`int($x)` / `''.$x`）。
+- **自動チェックを無効にした Web テストクライアントは、500 やログイン画面へのリダイレクトでも die しない。** エラーページを JSON としてパースするとゼロ値になり、0 件のアサーションが通る。`require.True(t, gjson.Valid(res))` でガードする。
 
-## Time
+## 時刻
 
-- **Mocked clock and real-time TTL.** A key computed from mocked time can expire on the wall clock, or not expire when the test expects it to. When the legacy test waited in real time, keep that wait in real time.
-- **Operations through the bridge take seconds.** Anything that relied on "within the same second" in one Perl process becomes flaky. Widen windows or restructure; don't add sleeps.
+- **モック時刻と実時間の TTL。** モック時刻から計算したキーが実時間で期限切れになる、あるいはテストが期待するときに期限切れにならない。旧テストが実時間で待っていたなら、その待ちは実時間のまま残す。
+- **ブリッジ越しの操作は秒単位かかる。** Perl の1プロセス内で「同じ1秒の間に」が前提だったものは不安定になる。sleep を足すのではなく、窓を広げるか構造を変える。
 
-## Lint (golangci-lint)
+## lint（golangci-lint）
 
-- **`unparam`:** an argument that every call site passes with the same value, or a return value every caller discards, gets flagged. This applies to test helpers too. It needs two or more call sites, so don't fold arguments of single-call helpers.
-- **`gocritic hugeParam`:** triggers at 80 bytes or more. `gjson.Result` is exactly 80 bytes, and so is a struct with five string fields (16 × 5). Use pointers.
-- **`gocritic commentedOutCode` misfires on non-English comments** that look like `identifier = value` or `identifier(...)`. Rephrase them as sentences.
-- **`intrange` / `modernize`:** use `for i := range N`, not three-clause loops.
-- **`testifylint empty`:** the `--fix` rewrites `assert.Equal(t, "", x)` to `assert.Empty`, and `Len(x, 0)` must be `Empty`. If you need to tell "missing" from "empty", assert `.Exists()` separately.
-- **`gofmt`:** inside doc comments it turns `''` into `”`. Avoid quoting Perl's `''` in doc comments.
-- **`misspell --fix`:** silently "corrects" typos you kept on purpose, such as test names that mirror legacy subtests. Suppress it on that line.
-- **`go build` does not compile `_test.go` files.** Run `go vet` or the tests to type-check them. And "vet passed" is not "lint passed".
+- **`unparam`:** 全呼び出し元が同じ値を渡す引数や、全呼び出し元が捨てる戻り値は指摘される。テストヘルパも対象。呼び出しが2か所以上あるときだけ立つので、呼び出しが1か所のヘルパの引数は畳まない。
+- **`gocritic hugeParam`:** 80 バイト以上で発火する。`gjson.Result` はちょうど 80 バイトで、文字列フィールド5つの構造体（16 × 5）も同じ。ポインタを使う。
+- **`gocritic commentedOutCode` は英語以外のコメントで誤検知する。** `識別子 = 値` や `識別子(...)` のように見えるもの。文の形に言い換える。
+- **`intrange` / `modernize`:** 3節の for ではなく `for i := range N` を使う。
+- **`testifylint empty`:** `--fix` は `assert.Equal(t, "", x)` を `assert.Empty` に書き換え、`Len(x, 0)` は `Empty` でなければならない。「無い」と「空」を区別したいなら、別に `.Exists()` をアサートする。
+- **`gofmt`:** doc コメントの中の `''` を `”` に変える。doc コメントで Perl の `''` を引用しない。
+- **`misspell --fix`:** わざと残した typo（旧 subtest に合わせたテスト名など）を黙って「修正」する。その行で抑制する。
+- **`go build` は `_test.go` をコンパイルしない。** 型チェックには `go vet` かテストの実行を使う。そして「vet が通った」は「lint が通った」ではない。

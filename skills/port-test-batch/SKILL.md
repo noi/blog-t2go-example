@@ -1,39 +1,39 @@
 ---
 name: port-test-batch
-description: Port many legacy test files in one go. Creates one worktree, branch and draft PR per file, runs the port-test workflow with up to J files in flight, and feeds knowledge back once at the end.
-argument-hint: "<legacy test> <legacy test> ... [-j <parallelism>] [-k <knowledge-branch>]"
+description: 複数の旧テストを一括で移植する。ファイルごとに worktree・ブランチ・ドラフト PR を作り、同時に J ファイルまで port-test のワークフローを回し、最後に知見を1回だけ還元する。
+argument-hint: "<旧テスト> <旧テスト> ... [-j <並列数>] [-k <知見ブランチ>]"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-# port-test-batch: port many files
+# port-test-batch（複数ファイルの一括移植）
 
-Targets: $ARGUMENTS
+対象: $ARGUMENTS
 
-**The canonical porting procedure is the `port-test` skill and its references.** This skill is a coordinator that multiplies that procedure across N files; it does not restate the porting logic. When in doubt, read `port-test/SKILL.md` (`${CLAUDE_SKILL_DIR}/../port-test/SKILL.md`). Load the project profile exactly as port-test Phase 0 describes.
+**移植手順の正典は `port-test` スキルとその references。** 本スキルは、その手順を N ファイルに多重化するコーディネータで、移植のロジックは再掲しない。迷ったら `port-test/SKILL.md`（`${CLAUDE_SKILL_DIR}/../port-test/SKILL.md`）を読む。プロジェクトプロファイルは port-test の Phase 0 と同じ方法で読み込む。
 
-- One file = one worktree = one branch = one draft PR.
-- `J` (`-j`) is the number of files **in flight at once**. Default 1 (sequential). There is no limit on the number of files.
-- The user is asked only (a) at intake (B0) and (b) when a plan says the port itself is pointless (B2), or when an implementer reports that the plan must change (B3). Everything else runs to completion.
+- 1ファイル = 1 worktree = 1 ブランチ = 1 ドラフト PR
+- `J`（`-j`）は**同時に進行中にするファイル数**。既定は 1（逐次）。ファイル数そのものに上限は無い
+- ユーザーに確認するのは、(a) 受付（B0）、(b) 計画が移植そのものを無意味と判定したとき（B2）、(c) implementer が計画の変更が必要と報告したとき（B3）だけ。それ以外は最後まで走り切る
 
-## Arguments
+## 引数の解釈
 
-- `-j <N>`: parallelism. **Anything other than an integer ≥ 1 is an error** (`-j 0` would never free a slot).
-- `-k <name>`: knowledge branch.
-- A flag written with a space consumes the next word as its value.
-- Every other argument is a target. Anything that does not match `legacy_test_glob` stops the run with an error.
+- `-j <N>`: 並列数。**1 以上の整数以外はエラー**（`-j 0` だと枠が永久に空かない）
+- `-k <name>`: 知見ブランチ
+- スペース区切りで書かれたフラグは、直後の1語をその値として消費する
+- それ以外の引数は全て対象。`legacy_test_glob` に合わないものがあればエラーとして止める
 
-| J | Guidance |
+| J | 目安 |
 |---|---|
-| 1 | Default. Lowest load and token use. |
-| 2 | Safe in the original deployment (10 CPU / 8 GB container VM). |
-| ≥3 | Memory pressure and leftover test data start to matter. **Confirm with the user first.** |
+| 1 | 既定。負荷もトークン消費も最小 |
+| 2 | 元の運用（10 CPU / 8 GB のコンテナ VM）での安全圏 |
+| 3 以上 | メモリの圧迫とテストデータの残骸が効いてくる。**先にユーザーに確認する** |
 
-Test data isolation is the project's responsibility; `test-execution.md` should state whether parallel runs can interfere. J only trades host resources and tokens for wall-clock time.
+テストデータの分離はプロジェクト側の責任で、並列実行が干渉しうるかは `test-execution.md` に書いておく。J が左右するのは、ホストのリソースとトークンを使って経過時間を縮める度合いだけ。
 
-## Naming
+## 命名
 
-Remove the legacy test root prefix and the extension, then replace `/` and `_` with `-`:
+旧テストのルートの接頭辞と拡張子を落とし、`/` と `_` を `-` に置換する:
 
 ```
 <legacy_root>/a_b/c_d.<ext>  →  slug = a-b-c-d   branch = port/a-b-c-d   worktree = <WS>/port-a-b-c-d
@@ -41,129 +41,129 @@ Remove the legacy test root prefix and the extension, then replace `/` and `_` w
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
-WS=$(dirname "$ROOT")   # where worktrees live; if ROOT is the main clone, use where `git worktree list` keeps the rest
+WS=$(dirname "$ROOT")   # worktree の置き場。ROOT が元クローンなら、`git worktree list` の他の worktree が並ぶ場所に読み替える
 ```
 
-(`profile.md` may override the branch prefix.)
+（ブランチの接頭辞は `profile.md` で上書きできる）
 
-## B0: intake & preflight
+## B0: 受付・事前チェック
 
-Run every git command here with `-C "$ROOT"`.
+この節の git コマンドは全て `-C "$ROOT"` を付ける。
 
-1. `git fetch origin <base>`. Every check below is relative to `origin/<base>`.
-2. Every target exists on **`origin/<base>`** (`git cat-file -e origin/<base>:<path>`), not just in the current worktree. If any target is missing, **stop the whole batch**. Do not run only part of it.
-3. Fix J. If J ≥ 3, confirm with the user.
-4. Slug collisions:
-   - local and remote-tracking branches (`port/*`, `*/port/*`)
-   - **`git ls-remote --heads origin 'port/*'`** (branches pushed from other machines are not in your tracking refs)
-   - `git worktree list` and existing directories
-   - **duplicates within the batch** (`a/b` and `a_b` produce the same slug)
+1. `git fetch origin <base>`。以下の判定は全て `origin/<base>` 基準
+2. 全対象が **`origin/<base>`** に実在するか確認する（`git cat-file -e origin/<base>:<path>`）。今の worktree だけでは足りない。1つでも無ければ**バッチ全体を止める**（一部だけ進めない）
+3. J を確定する。J ≥ 3 ならユーザーに確認する
+4. slug の衝突を確認する:
+   - ローカルとリモート追跡のブランチ（`port/*`、`*/port/*`）
+   - **`git ls-remote --heads origin 'port/*'`**（他のマシンが push したブランチは追跡 ref に無い）
+   - `git worktree list` と既存のディレクトリ
+   - **バッチ内の重複**（`a/b` と `a_b` は同じ slug になる）
 
-   Confirm any collision with the user.
-5. The local `<base>` is fresh (`git rev-list --count <base>..origin/<base>` is 0). Lint-diff tools usually compare against the local base, and a stale base makes the auto-fixer rewrite unrelated files.
-6. **Choose the knowledge version** (`port-test/references/knowledge-loop.md`, "Versions"). Compare the profile in the current worktree, on `origin/<base>`, and on the knowledge branch. **Pass the chosen absolute paths to every agent.** Do the same comparison for this batch skill's project notes.
-7. Run the environment preflight listed in `test-execution.md`: dependency stack running, disk space, leftover test data, tasks that must not run concurrently. **Anything destructive, such as cleanup or prune, needs user confirmation.** If the limits are hit during the batch, agents report and stop; they never clean up themselves.
-8. Fix the knowledge branch (port-test knowledge loop, step 1). Fold this question into the summary.
-9. **Ask once whether push and PR creation are allowed.** If they are not, the goal becomes "commit and print the commands" for every file. This is the only approval the summary asks for and waits on.
-10. Present the summary: J, then `| # | target | slug | branch | worktree |`. Create one task per file and keep it updated.
+   衝突があればユーザーに確認する
+5. ローカルの `<base>` が新しいか確認する（`git rev-list --count <base>..origin/<base>` が 0）。lint の差分ツールは多くの場合ローカルの base と比べるので、古いと自動修正が無関係なファイルを書き換える
+6. **知見の版を選ぶ**（`port-test/references/knowledge-loop.md`「版」）。プロファイルを、今の worktree・`origin/<base>`・知見ブランチの3か所で比べる。**選んだ版の絶対パスを全エージェントに渡す。** `profile.md` の「バッチの知見」も同じように比べる
+7. `test-execution.md` に挙げた環境の事前チェックを行う: 依存スタックが動いているか、ディスクの空き、テストデータの残骸、並走させてはいけない作業。**掃除や prune など破壊的な操作はユーザーの確認が要る。** バッチ中に上限に達したら、エージェントは報告して止まり、自分で掃除しない
+8. 知見ブランチを決める（port-test の知見ループの手順1）。この確認はサマリにまとめる
+9. **push と PR 作成をしてよいか、1回だけ確認する。** 不可なら、全ファイルのゴールは「コミットしてコマンドを提示する」になる。サマリで承認を求め、回答を待つのはこれだけ
+10. サマリを提示する: J と、`| # | 対象 | slug | ブランチ | worktree |`。ファイルごとにタスクを作り、進捗を更新していく
 
-## B1: create all worktrees
+## B1: worktree を全部作る
 
 ```bash
 git -C "$ROOT" worktree add -b "port/<slug>" "$WS/port-<slug>" origin/<base>
-# then copy the untracked setup files listed in profile.md (e.g. .env); stop that file if a required one is missing
+# 続けて profile.md に挙げた未追跡のセットアップ用ファイル（.env 等）をコピーする。必須のものが無ければそのファイルは中断する
 ```
 
-Worktrees stay until their PRs merge. Check host disk space when N is large.
+worktree は PR がマージされるまで残る。N が大きいときはホストのディスクの空きを確認する。
 
-## B2: plans
+## B2: 計画
 
-Start one `port-test-planner` per file. Planners are read-only, so up to about 3 can run in parallel regardless of J. Each prompt gives:
+ファイルごとに `port-test-planner` を起動する。planner は読み取り専用なので、J に関係なく3件程度まで並列でよい。プロンプトに渡すもの:
 
-- **the worktree as the base directory** for every investigation (target, layout check, substitute tests, routing config). Plans must use the same version the implementer will write to.
-- **the profile paths chosen in B0** (absolute)
-- "Follow port-test Phase 1, steps 1–7, and return the planner output format."
+- **調査の基準ディレクトリは worktree。** 対象・配置の判定・代替テスト・ルーティング設定の全てを worktree 側で見る。計画は、implementer が書き込むのと同じ版で立てる
+- **B0 で選んだプロファイルのパス**（絶対パス）
+- 「port-test の Phase 1 の手順1〜7に従い、planner の出力フォーマットで返すこと」
 
-Then:
+その後:
 
-1. Save each plan to `<scratchpad>/port-test-batch/<slug>-plan.md`, **never inside a worktree**.
-2. **Cross-check all plans.** This is the only point where all parallel PRs are visible together. Look for:
-   - (a) two plans appending to the same existing file
-   - (b) identical new package paths
-   - (c) new helper names that collide across appending plans
-   - (d) **several plans changing the same shared file** (common test server, factory)
+1. 各計画を `<scratchpad>/port-test-batch/<slug>-plan.md` に保存する。**worktree の中には置かない。**
+2. **全計画を突き合わせてクロスチェックする。** 並走する PR を全部同時に見られるのはここだけ。見ること:
+   - (a) 2つの計画が同じ既存ファイルに追記しようとしていないか
+   - (b) 新規パッケージのパスが重複していないか
+   - (c) 追記する計画どうしで、新しいヘルパ名が衝突していないか
+   - (d) **複数の計画が同じ共有ファイル**（共通のテストサーバー・factory）を変更しようとしていないか
 
-   Fix collisions in the plans before B3.
-   - **Early dispatch:** you may send a plan to B3 before the others return if it creates a **new package** and no plan still pending is in the same domain. If *every* plan creates a new package, same-domain plans are safe too, as long as they don't write the same shared file. Planner times differ by a factor of several, so waiting for all of them wastes J.
-   - **Families:** when several files have the same shape, run one first and put its measured facts into the later prompts.
-3. Present a summary table of the plans (target, output, port/merge/omit counts). Do not ask for approval.
-4. **Exception:** if a plan questions the port itself ("everything is already covered", "cannot port yet"), ask the user about that file. Always offer **three options: skip / port anyway / delete-only PR**. A delete-only PR removes the legacy test and the fixtures only it uses, with a coverage table in the body. For "skip", remove the worktree and the branch, or they will collide next time.
+   衝突は B3 の前に計画側で直す。
+   - **先行投入:** **新規パッケージ**を作る計画で、まだ返っていない計画に同じドメインのものが無ければ、他を待たずに B3 へ送ってよい。*全ての*計画が新規パッケージなら、同じ共有ファイルに書かない限り同じドメインでも安全。planner の所要時間は数倍違うので、全部を待つと J を活かせない。
+   - **同系の移植:** 同じ形のファイルが複数あるときは、1本を先に回し、その実測を後続のプロンプトに入れる。
+3. 計画の要約表を提示する（対象・出力先・移植/統合/省略の件数）。承認は求めない
+4. **例外:** 計画が移植そのものに疑問を呈したら（「全部カバー済み」「まだ移植できない」）、そのファイルについてユーザーに確認する。選択肢は必ず**3つ: 見送り / 予定どおり移植 / 削除だけの PR**。削除だけの PR は、旧テストとそこからしか使われないフィクスチャを削除し、本文にカバレッジの対応表を書く。「見送り」なら worktree とブランチを片付ける。残すと次回の衝突になる
 
-## B3: rolling window of J files
+## B3: J ファイルのローリング窓
 
-Keep at most J files in flight. A file holds its slot until its Phase 5 finishes, including while a `[must]` is being fixed.
+進行中のファイルは常に J 本まで。ファイルは Phase 5 が終わるまで枠を占有する。`[must]` の修正中も同じ。
 
-- J = 1: run each agent with `run_in_background: false`, explicitly.
-- J ≥ 2: run in the background and free slots when **the Agent completion notification** arrives.
-- **If no notification arrives for a long time (~60 min), check without disturbing anything:** the test containers or processes for the slug, the log file's mtime, changes in the worktree, and `ListAgents`. If the agent re-delegated, only its child may be running. Use SendMessage as a liveness probe only as a last resort, because it can break the notification you are waiting for.
+- J = 1: 各エージェントを `run_in_background: false` で明示的に起動する
+- J ≥ 2: background で起動し、**Agent の完了通知**を受けて枠を空ける
+- **長時間（目安60分）通知が来なければ、何も壊さない方法で確認する:** その slug のテスト用コンテナやプロセス、ログファイルの mtime、worktree の変更、`ListAgents`。再委譲されていれば子だけが動いていることがある。生存確認の SendMessage は最後の手段にする。待っている通知を壊しうるため
 
-### Implement + test (one launch)
+### 実装＋テスト（1回の起動）
 
-Start `port-test-implementer`. Unlike single mode, **Phases 2 and 3 run in one launch.** The prompt contains:
+`port-test-implementer` を起動する。単体実行と違い、**Phase 2 と 3 を1回の起動で完走させる。** プロンプトに含めるもの:
 
-- **At the very top, under "⚠ Read first": "Do not call the Agent tool at all (including fork). Do the work yourself."** Buried in the body, this rule was ignored. Placed first, re-delegation dropped from 1 in 9 files to 0 in the next 8.
-- "Your working directory is `<worktree>`. Use absolute paths. Never touch another worktree."
-- The profile paths chosen in B0, the target test, the output location, the full plan and the plan's path.
-- **The exact test command form from `test-execution.md`, filled in for this worktree** (unique container or process names, the worktree's config). Hand over the whole command. A list of flags gets reassembled in the wrong order.
-- **Prohibited:** stopping or removing shared infrastructure, and any prune or cleanup. Only resources the implementer started itself may be removed.
-- "Run `<lint>` on the host until it reports zero findings. Then check `git status` for unrelated changes made by the auto-fixer. Report infrastructure problems instead of working around them: lint lock contention, a stale cache pointing to deleted worktrees, a stale base."
-- "Do not copy causes from the plan into comments. Verify each one yourself, or write none." From the second file on, **list the kinds of wrong causes found in earlier files**.
-- **Repeated review findings from earlier files, with their full text.** The knowledge files already contain them, but they are still missed.
-- "Report knowledge candidates. Do not edit profile files."
-- "Write logs to `<scratchpad>/port-test-batch/<slug>-test-<n>.log`, never inside the worktree."
+- **一番上に「⚠ 最初に読むこと」として:「Agent ツールを一切呼ばないでください（fork を含む）。作業は自分で行ってください。」** 本文中に埋めたこのルールは無視された。冒頭に置いてからは、再委譲が9本中1本から、続く8本で0件になった
+- 「作業ディレクトリは `<worktree>`。絶対パスを使い、他の worktree には絶対に触らない」
+- B0 で選んだプロファイルのパス、対象テスト、出力先、計画の全文と計画のパス
+- **`test-execution.md` にあるテストコマンドの形を、この worktree 用に埋めたもの丸ごと**（一意なコンテナ名やプロセス名、worktree の設定）。フラグの一覧で渡すと、誤った順に組み立て直される
+- **禁止:** 共有インフラの停止・削除と、あらゆる prune や掃除。削除してよいのは implementer 自身が起動したリソースだけ
+- 「`<lint>` をホスト側で回し、0 件にすること。その後 `git status` で自動修正による無関係な変更を確認すること。インフラの問題は回避せず報告すること: lint のロック競合、削除済み worktree を指す古いキャッシュ、古い base」
+- 「計画の因果をコメントに写さないこと。1つずつ自分で確かめるか、何も書かないこと」。2本目以降は、**前のファイルで見つかった誤った因果の種類を列挙する**
+- **前のファイルで繰り返し出たレビュー指摘を、本文ごと。** 知見ファイルに既に書いてあっても、まだ見落とされる
+- 「知見候補は報告すること。プロファイルのファイルは編集しないこと」
+- 「ログは `<scratchpad>/port-test-batch/<slug>-test-<n>.log` に書き、worktree の中には書かないこと」
 
-If the implementer reports a contradiction with the plan, a need to change production code, or a need to weaken an assertion or add an omission, **ask the user about that file.** The exception: if the plan contradicts the project's conventions, **resolve it yourself in favor of the conventions.** Planners do misread conventions, and the implementer's report should not be squashed with "follow the plan".
+implementer が、計画との矛盾・プロダクションコードの変更の必要・アサーションの弱化や省略の追加の必要を報告してきたら、**そのファイルについてユーザーに確認する。** 例外として、計画がプロジェクトの規約と食い違っている場合は、**規約を優先して自分で解決する。** planner も規約を読み違えるし、implementer の報告を「計画に従え」で潰してはいけない。
 
-### Review
+### レビュー
 
-Start `port-test-reviewer` the same way, foreground or background depending on J. Give it:
+`port-test-reviewer` を同じ要領で起動する（J に応じて foreground か background）。渡すもの:
 
-- the paths and the plan
-- the new test cases and helpers
-- **the `git status --porcelain` and `git diff` output, which you run yourself**
-- test results, measured types and the fix history
-- the focus line on comment causes, plus the cause errors seen in earlier files
+- パスと計画
+- 新しいテストケースとヘルパ
+- **自分で実行した `git status --porcelain` と `git diff` の出力**
+- テスト結果、実測した型、修正の経緯
+- コメントの因果に関する重点観点と、前のファイルで見つかった因果の誤り
 
-Handling:
+扱い:
 
-- **Verify each `[must]` against the real file before sending it back.** Checking is always cheaper than a round trip. Sometimes the reviewer's conclusion is right but its explanation is wrong. Never paste the reviewer's wording into the fix request; send the facts you verified.
-- Send back *what* must be achieved, not *how*. One reviewer-proposed fix was impossible. The implementer proved it by measurement and proposed three alternatives; treat that as a result, not a failure.
-- If the review quotes code or line numbers that do not match the file, it is based on a stale read. **Wait a few minutes for a second notification before acting.** Several notifications can arrive from the same reviewer; check which one matches the current file.
-- Decide `[imo]` / `[ask]` yourself and record each decision and its reason for the final report.
+- **`[must]` は差し戻す前に実ファイルで裏取りする。** 確認は往復1回より常に安い。reviewer の結論は正しいが説明が誤っている、ということもある。reviewer の文言を修正依頼に貼らず、自分で確かめた事実を送る
+- 送るのは*何を*達成すべきかで、*どうやって*ではない。reviewer の提案した修正が実行不能だったことがある。implementer は実測でそれを示し、代替案を3つ出してきた。これは失敗ではなく成果として扱う
+- レビューが引用するコードや行番号がファイルと合わなければ、古い状態を読んでいる。**動く前に数分待って2通目の通知を見る。** 同じ reviewer から通知が複数届くことがあるので、今のファイルに合っているのがどれかを確かめる
+- `[imo]` / `[ask]` は自分で判断し、判断と理由を最終報告用に記録する
 
-### Finish (coordinator)
+### 仕上げ（コーディネータ）
 
-**First confirm that the implementer's report shows every test passing.** Otherwise handle the file as a failure.
+**まず implementer の報告で、テストが全て通っていることを確認する。** そうでなければ失敗として扱う。
 
-Then follow port-test Phase 5, steps 1–4, inside the worktree (`git -C <worktree>`; for `gh`, use `bash -c 'cd <worktree> && …'`). **Never skip the `git status --porcelain` inspection.** Remember that `git checkout --` does not remove untracked files, and `git add -A` will commit them.
+そのうえで port-test の Phase 5 の手順1〜4を worktree の中で行う（`git -C <worktree>`、`gh` は `bash -c 'cd <worktree> && …'`）。**`git status --porcelain` の点検は絶対に飛ばさない。** `git checkout --` は未追跡ファイルを消さず、`git add -A` がそれをコミットすることに注意する。
 
-If push is blocked, commit, record the commands, **keep the queue going**, and report everything at the end.
+push がブロックされたら、コミットしてコマンドを記録し、**キューは止めずに続け**、最後にまとめて報告する。
 
-### Failures
+### 失敗時
 
-- **A rate limit or session limit is not a failure.** If the worktree is clean (`git status --porcelain` is empty), resubmit the same prompt **after the reset time**; resubmitting earlier fails the same way. Several agents fail together when this happens.
-- Any other failure: free the slot, keep the worktree and branch, and report the phase and cause. Note that the leftovers must be removed before the file is retried.
+- **レート上限やセッション上限は失敗ではない。** worktree がクリーン（`git status --porcelain` が空）なら、**リセット時刻を過ぎてから**同じプロンプトを再投入する。それより前に出すと同じように落ちる。このときは複数のエージェントがまとめて落ちる
+- それ以外の失敗: 枠を空け、worktree とブランチは残し、失敗したフェーズと原因を報告する。そのファイルをやり直す前に残骸を片付ける必要があることも添える
 
-## B4: aggregate & knowledge
+## B4: 集約・知見
 
-1. Result table: `| target | branch | PR | port/merge/omit | review decisions |`, with failures listed separately.
-   - **Cross-check the helper names each implementer added** against each other. B2 only saw the plans, and two PRs that each build alone can still fail to compile together once both merge.
-2. **Feed knowledge back once, for all files.** Deduplicate the candidates, route each to the right file (port-test knowledge loop), and **look for corrections to existing entries** as well as additions. Before committing, check the knowledge branch's current HEAD against its remote; other sessions may have pushed in the meantime.
-3. Do not remove worktrees. Print the cleanup commands for after the merge.
+1. 結果表: `| 対象 | ブランチ | PR | 移植/統合/省略 | レビューの採否 |`。失敗は別枠にする
+   - **各 implementer が追加したヘルパ名を横断で突き合わせる。** B2 は計画しか見ていない。それぞれ単独ではビルドが通る2本の PR が、両方マージされた時点でコンパイルできなくなることがある
+2. **知見の還元は全ファイル分まとめて1回だけ行う。** 候補を重複排除し、それぞれを適切なファイルに振り分け（port-test の知見ループ）、追記だけでなく**既存項目の訂正**も探す。コミット前に、知見ブランチの今の HEAD とリモートを比べる。その間に他のセッションが push しているかもしれない
+3. worktree は片付けない。マージ後の片付け用コマンドを提示する
 
-## Parallel safety (summary)
+## 並列実行の安全（要点）
 
-- One worktree per concurrent test run. Never run two tests from the same worktree.
-- Shared infrastructure is never stopped or pruned by agents.
-- Scratch files never go inside worktrees.
-- Unapproved push and PR edits apply only to the PRs this batch creates.
+- テストを同時に走らせるなら、1本につき1つの worktree。同じ worktree から2本走らせない
+- 共有インフラをエージェントが止めたり prune したりしない
+- 作業ファイルを worktree の中に置かない
+- 承認なしの push と PR 編集は、このバッチが作った PR に限る

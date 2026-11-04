@@ -1,11 +1,11 @@
 {
-  "name": "test-porter",
+  "name": "blog-t2go-example",
   "owner": { "name": "TODO: owner" },
   "plugins": [
     {
-      "name": "test-porter",
+      "name": "blog-t2go-example",
       "source": "./",
-      "description": "Port legacy tests to a new language's test suite during a language migration."
+      "description": "言語移行で旧テストを新言語のテストへ移植するスキル。"
     }
   ]
 }

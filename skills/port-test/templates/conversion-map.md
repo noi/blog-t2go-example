@@ -1,39 +1,39 @@
-# Conversion map
+# 変換対応表
 
-Legacy → new mapping for this project. Seed it from `examples/<pair>/` if available, then grow it from real ports and review comments.
+このプロジェクトの旧→新の対応。`examples/<pair>/` があればそこから初期値を入れ、実際の移植とレビュー指摘で育てる。
 
-## Idioms
+## イディオム
 
-| Legacy | New | Notes |
+| 旧 | 新 | 備考 |
 |---|---|---|
 | | | |
 
-## Helpers
+## ヘルパ
 
-| Legacy factory / helper | New helper | Side effects to reproduce |
+| 旧 factory / ヘルパ | 新ヘルパ | 再現すべき副作用 |
 |---|---|---|
 | | | |
 
-## Mocks → real effects
+## mock → 実際の作用
 
-| Legacy mock | Real sink in the test environment | How to read it |
+| 旧 mock | テスト環境での実際の受け先 | 読み方 |
 |---|---|---|
 | | | |
 
-## Assertion conventions
+## アサーション規約
 
-- Success guard on otherwise unchecked calls: `<how, fatally>`
-- Fatal vs non-fatal: `<project rule>`
-- JSON / response comparison helper: `<name>` (and its gaps, e.g. "nil expectation cannot tell missing from null")
+- 他に検証しない呼び出しの成功ガード: `<書き方。fatal で>`
+- fatal / non-fatal: `<プロジェクトのルール>`
+- JSON / レスポンス比較ヘルパ: `<名前>`（とその穴。例:「nil 期待ではキー不在と null を区別できない」）
 
-## File layout
+## ファイル配置
 
-- New ports: `<new_test_root>/<domain>/<name>/` as a new package (closes the namespace; parallel PRs cannot collide)
-- Append to an existing file only when: `<rule>`
-- Shared fixtures: reference, do not copy
+- 新しい移植: `<new_test_root>/<domain>/<name>/` に新規パッケージ（名前空間が閉じるので、並走 PR が衝突しない）
+- 既存ファイルに追記するのは次の場合だけ: `<ルール>`
+- 共有フィクスチャ: 複製せず参照する
 
-## Reference examples
+## 参照すべき先例
 
-Ports worth imitating, closest-shape first:
+真似する価値のある移植。形が近い順に:
 
-- `<path>`: <what it shows>
+- `<パス>`: <何が分かるか>

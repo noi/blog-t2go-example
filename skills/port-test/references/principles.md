@@ -1,97 +1,97 @@
-# Porting principles
+# 移植の原則
 
-Language-agnostic lessons for porting tests from a legacy stack to a new one. Every item here came from a real port that went wrong first. Project-specific knowledge belongs in the project profile (`conversion-map.md` / `pitfalls.md`), not here.
+旧スタックから新スタックへテストを移植するときの、言語に依存しない教訓。どれも実際の移植で一度失敗してから得たもの。プロジェクト固有の知見はここではなく、プロジェクトプロファイル（`conversion-map.md` / `pitfalls.md`）に置く。
 
-Read this in Phase 1 (planning) and before implementing. Reviewers read `review-checklist.md`, which points back here.
+Phase 1（計画）と実装の前に読む。レビュアーは `review-checklist.md` を読み、そこからここを参照する。
 
-## 1. A port is a re-verification, not a transliteration
+## 1. 移植は書き写しではなく、検証のやり直し
 
-- **The goal is "the new test fails whenever the old one should have", not "the new code looks like the old code".** Port the *intent* of each check. Transliterating line by line copies the old test's blind spots and adds new ones from semantic gaps between the two test frameworks.
-- **Assume the old test may already be dead.** Common forms:
-  - A dequeue/poll helper that silently does nothing on an empty queue, so the assertion compares the *previous* value again.
-  - A matcher that passes on empty input (e.g. "is a subset of" against `[]`).
-  - A syntax slip that swallows the following checks (a missing comma after a wildcard matcher in a nested structure).
-  - A regex that only matches a prefix shared by both branches it is supposed to distinguish.
-  - A loop whose body never runs.
-  - A validator that returns the same error message for several branches, so matching the message does not prove which branch ran.
+- **ゴールは「新テストのコードが旧テストに似ていること」ではなく、「旧テストが落ちるべき場面で新テストも落ちること」。** 移植するのは各検証の*意図*。1行ずつ書き写すと、旧テストの死角をそのまま持ち込み、さらに2つのテストフレームワークの意味の差から新しい死角が加わる。
+- **旧テストは既に死んでいるかもしれない、と疑う。** よくある形:
+  - キューが空だと黙って何もしない dequeue/poll ヘルパ。アサーションは*前回の*値を再比較しているだけになる。
+  - 空の入力で通るマッチャ（例: `[]` に対する「部分集合である」）。
+  - 構文の小さな誤りで、後続の検証が飲み込まれている（入れ子構造のワイルドカードマッチャの後のカンマ抜け）。
+  - 区別すべき2つの分岐に共通する接頭辞しか見ていない正規表現。
+  - 本体が一度も実行されないループ。
+  - 複数の分岐で同じエラーメッセージを返すバリデータ。メッセージが一致しても、どの分岐を通ったかの証明にならない。
 
-  When you find one, strengthen the check in the port **and leave a one-line reason in the code**. Without it, the next person deletes the "extra" assertion.
-- **Old fixtures may not have checked their own success.** A factory that ignores the return value of the API calls it makes lets the old test stay green while the setup actually failed. If "the old test passes but the new one fails", first check whether the old setup really succeeded.
+  見つけたら移植で検証を強化し、**その理由をコードに1行残す**。理由が無いと、次の人が「余計なアサーション」として消す。
+- **旧テストの fixture は、自分の成功を確認していないことがある。** 呼んだ API の戻り値を無視する factory だと、セットアップが実は失敗していても旧テストは緑のまま。「旧テストは通るのに新テストが落ちる」ときは、まず旧テストのセットアップが本当に成功していたかを確かめる。
 
-## 2. Classify every legacy case, with evidence
+## 2. 旧テストのケースは、根拠付きで全て分類する
 
-Each legacy test case (subtest / `it` block / test function) gets exactly one class:
+旧テストの各ケース（subtest / `it` ブロック / テスト関数）を、次のどれか1つに分類する。
 
-| Class | Meaning | Required evidence |
+| 分類 | 意味 | 必要な根拠 |
 |---|---|---|
-| Port | Re-implemented in the new test | New test name |
-| Merge | Folded into another new test case | Target test name |
-| Omit: covered | Already verified elsewhere | **File and test name of the existing test, confirmed to exist and to check the same thing** |
-| Omit: obsolete | The test checks nothing meaningful anymore (route removed, feature gone, dead assertion) | Concrete reason |
+| 移植 | 新テストで書き直す | 新しいテスト名 |
+| 統合 | 別の新テストケースにまとめる | 統合先のテスト名 |
+| 省略（既存カバレッジあり） | 既に別のテストで検証されている | **既存テストのファイル名とテスト名。実在し、同じことを検証していると確認したもの** |
+| 省略（形骸化） | もはや意味のあることを何も検証していない（ルート削除済み・機能が無い・死んだアサーション） | 具体的な理由 |
 
-- An omission recorded only in the PR description is lost once the legacy file is deleted. **Record omissions in the new test file as well**, so a future reader can tell a deliberate omission from a missed port.
-- If every case is "omit: covered", the best outcome may be **a PR that deletes the legacy test without writing a new one**. Offer this as a third option next to "port anyway" and "skip".
+- PR 説明にだけ書いた省略は、旧ファイルの削除とともに失われる。**省略は新テストのファイルにも記録する。** 後から読む人が、意図的な省略と移植漏れを区別できるようにするため。
+- 全ケースが「省略（既存カバレッジあり）」なら、**新しいテストを書かずに旧テストを削除するだけの PR** が最善のことがある。「予定どおり移植」「見送り」と並ぶ第3の選択肢として提示する。
 
-## 3. Prefer observing real effects over mocks
+## 3. mock より、実際の作用を観測する
 
-- Legacy tests often mock an outbound boundary (a queue, push notification, logger, external API) and inspect the mock's recorded arguments. In the port, **read from the real sink when one exists in the test environment** (dequeue from the real queue, read the real table) and verify the payload.
-- Reproduce mock *scope* as a window: drain → act → drain, and assert only on what appeared inside the window.
-- **Do not throw away what happened during setup.** A legacy assertion of exact equality on an accumulated mock log also proved that *setup produced nothing unexpected*. If your window discards the setup period, assert explicitly that the relevant message kinds did not appear during setup.
-- During a migration, a mock written in the legacy language **cannot see effects produced by components already moved to the new language**. Some legacy tests were "fixed" by changing the expected count to 0. Reading the real sink lets you restore the real expectation.
-- If you replace a mock by seeding real data, check that the code really reads the place you seeded. A write to the wrong table is silent.
+- 旧テストは、外への境界（キュー・プッシュ通知・ロガー・外部 API）を mock し、記録された引数を覗くことが多い。移植では、**テスト環境に実際の受け先があればそれを読み**（実キューから取り出す・実テーブルを読む）、ペイロードを検証する。
+- mock の*スコープ*は窓で再現する。drain → 操作 → drain とし、窓の中に現れたものだけをアサートする。
+- **セットアップ中に起きたことを捨てない。** 累積した mock ログに対する完全一致のアサーションは、「セットアップ中に予期しないものが何も出ていない」ことも証明していた。窓方式でセットアップ期間を捨てるなら、該当する種類のメッセージがセットアップ中に出ていないことを明示的にアサートする。
+- 移行の途中では、**旧言語で書いた mock は、新言語へ移行済みのコンポーネントが起こした作用を観測できない。** そのため期待件数を 0 に変えて「直された」旧テストがある。実際の受け先を読めば、本来の期待値に戻せる。
+- mock を実データの投入に置き換えるなら、コードが本当にその投入先を読んでいるかを確認する。別テーブルへの書き込みは何も言わずに通る。
 
-## 4. Assertion design: "what would make this fail?"
+## 4. アサーション設計:「何が起きたらこれは落ちるのか」
 
-For every assertion, you should be able to say what broken behavior it would catch. If you cannot, the assertion is decoration. Four recurring shapes:
+アサーションごとに、それがどんな壊れ方を捕まえるのかを言えなければならない。言えないアサーションは飾りにすぎない。繰り返し現れる4つの形:
 
-1. **Filter equals expectation.** `SELECT ... WHERE id IN (3,4,5)` and then expect `{3,4,5}`. Over-granting outside the filter is invisible.
-2. **Count that cannot change.** Asserting "did not increase" on something the design aggregates into one row.
-3. **Half of an AND.** The behavior needs A and B, and the test only shows "0 results when A is false". Add the case where only the other side is false.
-4. **Baseline from a different path.** A negative check ("not visible", 404, empty list) needs a **positive baseline through the same actor and the same path**. A 404 also happens on a typo or a failed precondition. Show that the same request returned 200 before the deletion.
+1. **絞り込み条件と期待値が同じ集合。** `SELECT ... WHERE id IN (3,4,5)` して `{3,4,5}` を期待する。絞り込みの外への過剰付与は見えない。
+2. **変わり得ない件数。** 設計上1行に集約されるものに「増えていない」をアサートする。
+3. **AND 条件の片側だけ。** 振る舞いには A と B が両方要るのに、テストは「A が偽なら 0 件」しか示していない。もう片方だけが偽のケースを足す。
+4. **別の経路で取ったベースライン。** 否定の検証（「見えない」「404」「空のリスト」）には、**同じ主体・同じ経路での正のベースライン**が要る。404 は typo でも前提の失敗でも起きる。削除前に同じリクエストが 200 を返したことを示す。
 
-Further rules:
+その他のルール:
 
-- **Fatal vs. non-fatal:** use the fatal form (stop the test) for preconditions and for values that later checks depend on. Use the non-fatal form only where it is useful to see several independent failures at once.
-- **Minimum success guard:** when an API call's response is otherwise unchecked, assert at least its success indicator, and assert it fatally. This applies even when the legacy test checked nothing.
-- **Order:** do not assert an order the system does not guarantee (queues, unordered sets). Count by kind instead.
-- **Zero values:** in the new language, "missing" often reads as a zero value (`""`, `0`, `false`, `nil`). Assert existence as well as value when "missing" would be a bug.
-- **Derivable expectations:** expected values should be derivable from the setup, not magic numbers.
+- **fatal と non-fatal**: 前提条件と、後続の検証が依存する値には fatal 形（テストを止める）を使う。non-fatal 形は、独立した失敗をまとめて見たほうが役立つ箇所だけで使う。
+- **最低限の成功ガード**: 他にレスポンスを検証しない API 呼び出しでは、少なくとも成功の指標を、fatal でアサートする。旧テストが何も検証していなかった場合も同じ。
+- **順序**: システムが保証しない順序（キュー・順不同の集合）をアサートしない。代わりに種類ごとに数える。
+- **ゼロ値**: 新言語では「無い」がゼロ値（`""` / `0` / `false` / `nil`）として読めることが多い。「無い」こと自体がバグになる場面では、値だけでなく存在もアサートする。
+- **導出できる期待値**: 期待値はマジックナンバーではなく、セットアップから導出できるものにする。
 
-## 5. Types and defaults are facts to measure, not to infer
+## 5. 型と既定値は、推測せず実測する事実
 
-- **Implicit defaults differ between test harnesses.** The legacy harness may have sent a locale, time zone, user agent, network type or client version implicitly. The new harness sends something else, or nothing. "Not specified" is not "does not depend on". Where you set a value explicitly, write one line explaining why.
-- **Empty is not absent.** An empty string can take a different branch than a missing key. Some standard libraries silently map empty input to a default (for example, an empty time zone name meaning UTC).
-- **Dynamic-language response types depend on where the value came from** (database → string, literal → number) and may differ across endpoints for the same field. The legacy expected value, which was compared loosely, is not evidence of the type. Neither is the API spec. **Determine the type by measurement on the first run**, then assert type and value together.
+- **テスト基盤ごとに暗黙の既定値が違う。** 旧基盤はロケール・タイムゾーン・ユーザーエージェント・ネットワーク種別・クライアントバージョンを暗黙に送っていたかもしれない。新基盤は別の値を送るか、何も送らない。「指定していない」は「依存していない」ではない。値を明示した箇所には、理由を1行書く。
+- **空は不在ではない。** 空文字は、キーが無い場合と別の分岐に入ることがある。標準ライブラリによっては、空の入力を黙って既定値に読み替える（例: 空のタイムゾーン名が UTC になる）。
+- **動的言語のレスポンスの型は、値の出どころで決まる**（DB 由来 → 文字列、リテラル → 数値）。同じフィールドでもエンドポイントによって違うことがある。緩く比較されていた旧テストの期待値は、型の根拠にならない。API 仕様も同じ。**初回の実行で実測して型を確定させ**、型と値をまとめてアサートする。
 
-## 6. Time, processes and hidden daemons
+## 6. 時刻・プロセス・隠れたデーモン
 
-- **Mocked clock and real-time TTL do not mix.** Keys may be computed from mocked time while expiry follows wall-clock time.
-- **Crossing a process boundary changes timing.** Operations that took milliseconds inside one legacy process can take seconds when the new test calls into the legacy stack through a bridge. This shows up as flakiness only in CI.
-- **In-process caches cannot be flushed from outside.** Reorder the test instead of fighting the cache.
-- **Do not add daemons or workers the legacy test did not run.** Processing a queue that the legacy test left alone changes the preconditions, and assertions that used to pass start failing. Leave a comment saying why you did *not* add it, or someone will.
-- The reverse also happens: in the legacy environment some async work ran synchronously in "test mode". The port may need to run that worker explicitly.
+- **モックした時刻と実時間の TTL は混ざらない。** キーはモック時刻から計算され、有効期限は実時間で進む、ということがある。
+- **プロセス境界をまたぐとタイミングが変わる。** 旧言語の1プロセス内ではミリ秒で済んでいた操作が、新テストからブリッジ越しに旧スタックを呼ぶと秒単位になる。CI でだけ不安定になる形で現れる。
+- **プロセス内キャッシュは外から消せない。** キャッシュと戦うより、テストの順序を組み替える。
+- **旧テストが動かしていないデーモンやワーカーを足さない。** 旧テストが手を付けなかったキューを処理すると前提が変わり、通っていたアサーションが落ち始める。*足さなかった*理由をコメントに残す。残さないと誰かが足す。
+- 逆も起きる。旧環境では、一部の非同期処理が「テストモード」で同期実行されていた。移植ではそのワーカーを明示的に動かす必要があるかもしれない。
 
-## 7. Comments: few, true, and self-contained
+## 7. コメントは少なく、正しく、それ自体で完結させる
 
-- **Write only non-obvious "why" comments.** Do not restate what the function name and code already say. A 350-line test with 60 lines of comments was judged excessive in review.
-- **Never reference things outside the repository**: the conversion plan, knowledge files, review comment numbers. Write the reason itself in one line.
-- **Never reference line numbers, and never reference the legacy test path**, which is deleted when the port merges.
-- **A wrong causal comment passes CI.** This was the largest single source of blocking review findings: in one batch, every `[must]` was a false explanation in a comment. Typical errors:
-  - Naming a function that does not exist as the source of a behavior.
-  - Reversing the direction of a defaulting operator.
-  - Claiming a branch "can fire" when it cannot be reached in real time.
-  - Attaching a reason to two lines when it applies to only one.
-  - Copying a plausible but wrong cause from the plan.
-- **Rule: only write a cause you have verified in the implementation yourself.** A value with no explanation is better than a wrong explanation. Limit causal comments to values that cannot be read from the code.
+- **自明でない「なぜ」だけを書く。** 関数名とコードから読めることを繰り返さない。350行のテストに60行のコメントが付いたものは、レビューで過剰と判断された。
+- **リポジトリの外にあるものを参照しない**: 変換計画、知見ファイル、レビュー指摘の番号。理由そのものを1行で書く。
+- **行番号を参照しない。旧テストのパスも参照しない。** 移植がマージされると削除される。
+- **誤った因果コメントは CI を通る。** これがブロッキングなレビュー指摘の最大の発生源だった。あるバッチでは、`[must]` が全件、コメントの誤った説明だった。典型的な誤り:
+  - 存在しない関数を、ある挙動の出どころとして挙げる。
+  - デフォルト値を返す演算子の向きを取り違える。
+  - 実時間では到達できない分岐を「発火しうる」と書く。
+  - 1行にしか当てはまらない理由を、2行に付ける。
+  - 計画にあったもっともらしいが誤った原因を写す。
+- **ルール: 自分で実装を確認した因果だけを書く。** 誤った説明より、説明の無い値のほうがよい。因果のコメントは、コードから読み取れない値に限る。
 
-## 8. Parallel work and namespaces
+## 8. 並列作業と名前空間
 
-- Grep cannot see unmerged parallel PRs. **Give each port its own package or module** so that helper names cannot collide between PRs that are open at the same time.
-- Shared helper files, such as the common test server and factory, are the one place collisions remain. Add to them, never rewrite them, and coordinate ordering when several ports touch the same file.
-- **Run one port of a family first**, then give its measured facts (types, response shapes, which risks turned out not to matter) to the later ports. In practice the later ports then pass on the first try.
+- grep では、マージされていない並走 PR は見えない。**移植ごとに独立したパッケージやモジュールを作り**、同時に開いている PR 間でヘルパ名が衝突しないようにする。
+- 共有のヘルパファイル（共通のテストサーバー・factory 等）だけは衝突が残る。追加だけにして書き換えない。複数の移植が同じファイルに触れるなら、順序を調整する。
+- **同系の移植は1本を先に通す。** そこで実測した事実（型・レスポンスの形・結局問題にならなかったリスク）を後続に渡す。実際、後続は一発で通るようになった。
 
-## 9. Tooling
+## 9. ツール
 
-- **"Passed vet/fmt" is not "passed lint".** Run the same lint entry point CI uses, on the host where it works, and get it to zero findings before review.
-- Auto-fixing linters may rewrite unrelated files when the diff base is stale. Inspect `git status` after every auto-fix run.
-- A linter can "correct" intentional content: typos kept on purpose, quotes inside doc comments, code-like prose in comments. Suppress these locally with a reason; do not let the fixer change the meaning of the test.
+- **「vet/fmt が通った」は「lint が通った」ではない。** CI と同じ lint の入口を、それが動くホスト側で回し、レビューの前に指摘を 0 件にする。
+- 自動修正する linter は、diff の基準が古いと無関係なファイルまで書き換えることがある。自動修正を回すたびに `git status` を確認する。
+- linter は意図的な内容を「修正」してしまうことがある。わざと残した typo、doc コメント内の引用符、コメント中のコードのような文章などだ。理由を添えてその箇所だけ抑制し、自動修正にテストの意味を変えさせない。

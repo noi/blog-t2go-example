@@ -1,37 +1,37 @@
-# test-porter profile
+# port-test プロファイル
 
-Project-specific settings for the `port-test` / `port-test-batch` skills. Edited by humans; the knowledge files next to it grow automatically.
+`port-test` / `port-test-batch` スキル用のプロジェクト固有の設定。人が編集する。隣の知見ファイルは自動で育つ。
 
-## Migration
+## 移行
 
-- Language pair: <legacy> → <new>            (e.g. Perl → Go)
+- 言語ペア: <旧言語> → <新言語>            （例: Perl → Go）
 - legacy_test_glob: `<t/**/*.t>`
 - new_test_root: `<tests/>`
-- Project testing rules to read: `<path or "none">`
+- 読むべきプロジェクトのテスト規約: `<パス or「なし」>`
 
-## Legacy or migrated?
+## 旧実装か移行済みか
 
-How to tell whether a component the test touches is still implemented in the legacy stack:
+テストが触るコンポーネントが、まだ旧スタックで実装されているかを判定する方法:
 
-- Endpoints: <e.g. "look up the path in the routing config `<file>`; listed under the new cluster = migrated, listed under legacy *or not listed* (catch-all) = legacy">
-- Workers/daemons: <how to tell>
-- Helpers to call for each: <e.g. `s.Post` for migrated, `s.PostLegacy` for legacy; `s.RunLegacy` only for running legacy-only workers>
+- エンドポイント: <例:「ルーティング設定 `<ファイル>` でパスを引く。新クラスタに列挙 = 移行済み、旧クラスタに列挙 *または記載なし*（catch-all）= 旧実装」>
+- ワーカー/デーモン: <判定方法>
+- それぞれで呼ぶヘルパ: <例: 移行済みは `s.Post`、旧実装は `s.PostLegacy`。`s.RunLegacy` は旧スタックにしか無いワーカーの実行だけに使う>
 
-## Commands
+## コマンド
 
-- Run one new test package: see `test-execution.md`
-- lint: `<make lint-diff>`   (must report 0 findings; this is the CI entry point)
-- base branch: `<main>`
+- 新テストのパッケージを1つ実行する: `test-execution.md` を参照
+- lint: `<make lint-diff>`   （0 件が完了条件。CI の入口と同じもの）
+- ベースブランチ: `<main>`
 
-## Git / PR conventions
+## Git / PR の規約
 
-- Single-run branch: `<user>/port-<short-name>`
-- Batch branch prefix: `port/`
-- Commit message / PR title: `port: <legacy test path>`
-- PR label: `<port>`        Knowledge PR label: `<port-knowledge>`
-- Knowledge branch name pattern: `<*port-knowledge*>`
-- Untracked files to copy into new worktrees: `<.env, .claude/settings.local.json>`
+- 単体実行のブランチ: `<user>/port-<短縮名>`
+- バッチのブランチ接頭辞: `port/`
+- コミットメッセージ / PR タイトル: `port: <旧テストのパス>`
+- PR ラベル: `<port>`        知見 PR のラベル: `<port-knowledge>`
+- 知見ブランチ名のパターン: `<*port-knowledge*>`
+- 新しい worktree にコピーする未追跡ファイル: `<.env, .claude/settings.local.json>`
 
-## Batch notes
+## バッチの知見
 
-<Coordinator-level knowledge discovered in batches: safe J, resource limits, notification quirks, …>
+<バッチで分かったコーディネータ側の知見: 安全な J、リソースの上限、通知の癖、…>

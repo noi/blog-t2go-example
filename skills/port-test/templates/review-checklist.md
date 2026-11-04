@@ -1,7 +1,7 @@
-# Review checklist (project additions)
+# レビュー観点（プロジェクトの追加分）
 
-Read together with the bundled base checklist. Add points that reviewers in *this* project keep raising, citing the convention they come from.
+同梱の基本観点と合わせて読む。*このプロジェクトで*レビュアーが繰り返し挙げる観点を、根拠となる規約とともに足していく。
 
-## Assertion strength
+## アサーションの強さ
 
-## Code conventions
+## コード規約

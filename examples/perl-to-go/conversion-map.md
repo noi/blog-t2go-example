@@ -1,72 +1,72 @@
-# Conversion map: Perl (Test::More / Test::Deep) → Go (testing / testify / gjson)
+# 変換対応表: Perl（Test::More / Test::Deep）→ Go（testing / testify / gjson）
 
-Seed for a project's `conversion-map.md`. This covers only language-level and library-level mappings. Project helpers (test server, factories, legacy bridge) are added by each project.
+プロジェクトの `conversion-map.md` の初期値。扱うのは言語レベル・ライブラリレベルの対応だけ。プロジェクトのヘルパ（テストサーバー・factory・旧スタックへのブリッジ）は各プロジェクトで足す。
 
-## Test structure
+## テストの構造
 
-| Perl | Go | Notes |
+| Perl | Go | 備考 |
 |---|---|---|
-| `subtest 'name' => sub { ... }` | `t.Run("name", func(t *testing.T) { ... })` | Keep the original subtest name, even with typos (suppress `misspell` locally). |
-| `done_testing` | (implicit) | |
-| `local $ENV{...}` / `mock_guard` scope | setup + `t.Cleanup` | Mock scopes become observation windows; see "Mocks". |
-| per-subtest DB reset | Often **not** per `t.Run` | If the new harness loads fixtures once per test, rows from all subtests coexist. Separate the data or the fixture directories. |
+| `subtest 'name' => sub { ... }` | `t.Run("name", func(t *testing.T) { ... })` | 元の subtest 名を維持する。typo があっても維持する（`misspell` はその行だけ抑制する） |
+| `done_testing` | （不要） | |
+| `local $ENV{...}` / `mock_guard` のスコープ | セットアップ + `t.Cleanup` | mock のスコープは観測の窓になる。「mock」の節を参照 |
+| subtest ごとの DB リセット | `t.Run` ごとにリセットされるとは**限らない** | 新基盤がフィクスチャをテスト単位で1回だけ読むなら、全 subtest の行が共存する。データかフィクスチャのディレクトリを分ける |
 
-## Assertions
+## アサーション
 
-| Perl | Go | Notes |
+| Perl | Go | 備考 |
 |---|---|---|
-| `ok $x` | `require.True` / `assert.True` | Prefer an explicit value comparison; `ok` is weak. |
-| `is $got, $exp` | `assert.Equal` / `require.Equal` | `is` compares as strings. Decide the Go type by measurement (pitfalls: "Types"). |
-| `is $x, undef` | `Type == gjson.Null` **and** `.Exists()` | gjson returns a zero `Result` for a missing key, and its `Type` is `Null`. |
-| `cmp_deeply $got, $hash` (plain hashref) | exact match of all keys + fixed key count | Plain hashrefs compare the **key set** exactly. |
-| `superhashof(...)` | path-based partial match | Only the listed keys, but **each must exist**. |
-| `bag(...)` | unordered match keyed by id + `require.Len` | Unordered, but the count is exact. Indexed paths (`x.0`, `x.1`) would silently fix the order. |
-| `subbagof(...)` / `subsetof(...)` | exact match against the **measured** set | Means actual ⊆ expected, so **an empty result passes**. Don't translate it to `Contains`. |
-| `superbagof(...)` | `Subset` + a reason | The direction is the reverse of `subbagof`. |
-| `ignore()` | `NotZero` / `Exists()` | Skips the value but **still requires the key**. Dropping the field weakens the test. |
-| `like $x, qr/.../` | `assert.Regexp` or exact match | Check that the regex distinguishes the branches; a shared prefix proves nothing. |
-| `dies_ok` / `throws_ok` | `require.Error` + error type/message | |
+| `ok $x` | `require.True` / `assert.True` | 値の比較を明示するほうがよい。`ok` は弱い |
+| `is $got, $exp` | `assert.Equal` / `require.Equal` | `is` は文字列として比較する。Go 側の型は実測で決める（落とし穴「型」） |
+| `is $x, undef` | `Type == gjson.Null` **かつ** `.Exists()` | gjson はキーが無いとゼロ値の `Result` を返し、その `Type` は `Null` |
+| `cmp_deeply $got, $hash`（plain hashref） | 全キーの完全一致 + キー数の固定 | plain hashref は**キー集合**を完全一致で比較する |
+| `superhashof(...)` | パス指定の部分一致 | 列挙したキーだけを見るが、**各キーは存在しなければならない** |
+| `bag(...)` | id で引く順不同マッチ + `require.Len` | 順不同だが件数は厳密。index パス（`x.0`・`x.1`）で書くと黙って順序を固定してしまう |
+| `subbagof(...)` / `subsetof(...)` | **実測した**集合との完全一致 | actual ⊆ expected の意味なので、**空の結果でも通る**。`Contains` に訳さない |
+| `superbagof(...)` | `Subset` + 理由 | 向きは `subbagof` の逆 |
+| `ignore()` | `NotZero` / `Exists()` | 値は見ないが、**キーの存在は要求している**。フィールドごと落とすとテストが弱くなる |
+| `like $x, qr/.../` | `assert.Regexp` か完全一致 | 正規表現が分岐を区別できているか確認する。共通の接頭辞だけでは何も証明しない |
+| `dies_ok` / `throws_ok` | `require.Error` + エラーの型/メッセージ | |
 
-## Responses (JSON)
+## レスポンス（JSON）
 
-- Perl APIs often return **HTTP 200 with a body-level status** (`status.ok = 0`) on error. Check the body status too, not just the HTTP code.
-- If the call's response is otherwise unchecked, assert the success flag **fatally**: `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())`.
+- Perl の API はエラーでも **HTTP 200 で本文中にステータス**（`status.ok = 0`）を返すことが多い。HTTP コードだけでなく本文のステータスも見る。
+- 他にレスポンスを検証しない呼び出しでは、成功フラグを **fatal で**アサートする: `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())`。
 - gjson:
-  - A missing key returns a zero `Result`. `.Int()`, `.String()` and `.Bool()` then return zero values. Pair them with `.Exists()` when "missing" would be a bug.
-  - `path.#` returns 0 when `path` is missing. A 0-count assertion therefore needs a success guard.
-  - `path.#(cond)` returns only the **first** match. Use `#(cond)#` to count matches.
-  - `gjson.Result` is 80 bytes, and gocritic `hugeParam` triggers at 80 or more. Pass it to helpers by pointer.
-- Before using an ID extracted from a response, guard it with `require.NotEmpty`. A parse failure returns 0, and many factories treat 0 as "create a new one".
+  - キーが無いとゼロ値の `Result` を返す。`.Int()` / `.String()` / `.Bool()` はゼロ値になる。「無い」ことがバグになる箇所では `.Exists()` を併記する。
+  - `path.#` は `path` が無いと 0 を返す。0 件のアサーションには成功ガードが要る。
+  - `path.#(cond)` は**最初の1件**しか返さない。マッチ数を数えるなら `#(cond)#` を使う。
+  - `gjson.Result` は 80 バイトで、gocritic の `hugeParam` は 80 以上で発火する。ヘルパにはポインタで渡す。
+- レスポンスから取り出した ID は、使う前に `require.NotEmpty` でガードする。パースに失敗すると 0 が返り、多くの factory は 0 を「新しく作る」と解釈する。
 
-## Mocks → real effects
+## mock → 実際の作用
 
-| Perl pattern | Go |
+| Perl のパターン | Go |
 |---|---|
-| Mocked enqueue, accumulated array, `cmp_deeply` against the whole array | drain → act → drain on the **real** queue. Fix the window's total count with `require.Len`, **and** assert 0 of the relevant kinds during setup. |
-| Mocked push / logger | Read the real sink, if the test environment has one. |
-| `dequeue(sub { is undef, shift })` | Watch out: some queue helpers **do not call the callback on an empty queue**. Then the next `cmp_deeply $row` compares the previous row again. Replace it with drain-and-count. |
+| enqueue を mock し、累積配列全体に `cmp_deeply` | **実**キューで drain → 操作 → drain。窓の総件数を `require.Len` で固定し、**かつ**セットアップ中に該当種別が 0 件だったこともアサートする |
+| push / logger の mock | テスト環境に実際の受け先があればそれを読む |
+| `dequeue(sub { is undef, shift })` | 注意: キューが**空だとコールバックを呼ばない**ヘルパがある。その場合、直後の `cmp_deeply $row` は前回の行を再比較している。drain して数える形に置き換える |
 
-## Time
+## 時刻
 
-| Perl | Go | Notes |
+| Perl | Go | 備考 |
 |---|---|---|
-| `set_fixed_time($t)` | the project's mocked clock | Always an absolute offset. |
-| `my $time = time;` inside a helper | — | It **shadows** the outer `$time` and does not advance it. Don't make the Go helper return "the new time" for the next phase to start from. |
-| `Sub::Retry::retry($times, $delay, \&code, \&retry_if)` | deadline loop in the test goroutine | 3rd argument = code, 4th = condition. Don't use `require.Eventually` if the condition can call `t.Fatal` (see pitfalls). |
+| `set_fixed_time($t)` | プロジェクトのモック時刻 | 常に絶対オフセット |
+| ヘルパ内の `my $time = time;` | — | 外側の `$time` を**シャドーイング**するだけで進めない。Go のヘルパに「新しい時刻」を返させて次のフェーズの起点にしない |
+| `Sub::Retry::retry($times, $delay, \&code, \&retry_if)` | テスト goroutine 内の deadline ループ | 3番目が実行対象、4番目が継続判定。条件が `t.Fatal` しうるなら `require.Eventually` は使わない（落とし穴を参照） |
 
-## Encoding
+## エンコーディング
 
-- Perl test files usually have `use utf8;`. Generated Perl snippets that a Go bridge executes **often don't**. Without it, non-ASCII literals are byte strings:
-  - Values written to the DB are double-encoded.
-  - Regex matches against decoded text never match. **Negative matches therefore always pass.**
-- `print` of non-ASCII without `binmode STDOUT, ':utf8'` prints "Wide character" warnings and no reliable UTF-8 output.
-- JSON responses may contain `\uXXXX` escapes, so matching non-ASCII text against the raw body fails. Decode the JSON first.
+- Perl のテストファイルには普通 `use utf8;` がある。Go のブリッジが実行する生成 Perl スニペットには**無いことが多い**。無いと、非 ASCII のリテラルはバイト列になる:
+  - DB に書いた値が二重エンコードされる。
+  - デコード済みのテキストに対する正規表現が決してマッチしない。**否定のマッチは常に通る。**
+- `binmode STDOUT, ':utf8'` なしで非 ASCII を `print` すると「Wide character」警告が出て、UTF-8 の出力が保証されない。
+- JSON のレスポンスは `\uXXXX` エスケープを含むことがあり、生の本文に非 ASCII のテキストを当てても失敗する。先に JSON をデコードする。
 
-## Strings embedded into generated Perl
+## 生成 Perl に埋め込む文字列
 
-Use **single quotes** for values. Inside double quotes, `@x` and `$x` are interpolated, and an undefined variable silently becomes an empty string. Use double quotes or `join` only where you need `\n` / `\r\n`.
+値は**シングルクォート**にする。ダブルクォートの中では `@x` と `$x` が展開され、未定義の変数は黙って空文字になる。ダブルクォートや `join` は `\n` / `\r\n` が必要な箇所だけで使う。
 
-## Determinism
+## 決定性
 
-- Perl hash order is randomized per process. Repository code that does `SELECT ... LIMIT 1` without `ORDER BY` against rows a factory inserted by iterating a hash is non-deterministic. Make the rows unique or identical.
-- Go `map` iteration is randomized too. Never assume an order.
+- Perl のハッシュ順序はプロセスごとにランダム化される。factory がハッシュを反復して入れた行に対し、`ORDER BY` なしの `SELECT ... LIMIT 1` をするリポジトリのコードは非決定になる。行を一意にするか、同じ内容に揃える。
+- Go の `map` の反復順もランダム。順序を前提にしない。

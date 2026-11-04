@@ -1,55 +1,55 @@
-# Knowledge loop
+# 知見ループ
 
-The skill stays accurate only because every port feeds what it learned back into the project profile. In the original deployment, the pitfalls file grew from 34 to 523 lines over about 250 ports. The workflow skill itself barely changed. Accuracy came from the knowledge base.
+スキルの精度を保てるのは、移植のたびに分かったことをプロジェクトプロファイルに書き戻しているからだ。元の運用では、約250本の移植で落とし穴集が 34 行から 523 行に育った。ワークフロー本体はほとんど変わっていない。精度は知見から来た。
 
-## What goes where
+## 何をどこに書くか
 
-| Learned | File |
+| 分かったこと | 書く先 |
 |---|---|
-| A trap you actually stepped in (symptom → cause → fix) | `pitfalls.md` |
-| A legacy → new mapping, assertion convention, layout rule | `conversion-map.md` |
-| How to run, parallelize, clean up, lint | `test-execution.md` |
-| A point reviewers keep raising | `review-checklist.md` (project) |
-| How the batch coordinator should behave | the project's batch notes in `profile.md` |
+| 実際に踏んだ罠（症状 → 原因 → 対処） | `pitfalls.md` |
+| 旧→新の対応・アサーション規約・配置ルール | `conversion-map.md` |
+| 実行・並列化・掃除・lint の方法 | `test-execution.md` |
+| レビュアーが繰り返し挙げる観点 | `review-checklist.md`（プロジェクト側） |
+| バッチのコーディネータの振る舞い方 | `profile.md` の「バッチの知見」 |
 
-Rules for entries:
+書き方のルール:
 
-- **Only things you actually hit.** Do not record speculation.
-- Each entry gives the symptom you would search for, the cause, and the fix. Name the general shape, then the concrete example.
-- **Look for corrections, not just additions.** Knowledge files can be wrong too. A wrong entry gets copied into code comments and becomes a review finding. When you correct an entry, say what was wrong ("an earlier version of this entry claimed X; that does not hold because Y").
-- Revisit stale notes, such as "until PR X merges" or dated TODOs, whenever you touch a section.
+- **実際に踏んだものだけを書く。** 推測は書かない。
+- 各項目には、検索するときに使う症状・原因・対処を書く。一般的な形を先に書き、そのあと具体例を書く。
+- **追記だけでなく訂正も探す。** 知見ファイル自体が誤っていることもある。誤った項目はコードコメントに転記され、レビュー指摘になって返ってくる。訂正するときは、何が誤りだったかを書く（「以前この項目は X と書いていたが、Y のため成立しない」）。
+- 節に触れるたびに、古くなった注記（「PR X のマージまで」や日付付きの TODO）を見直す。
 
-## Why a separate branch
+## なぜ別ブランチにするのか
 
-Knowledge edits **never go into the port PR**:
+知見の編集は**移植 PR に絶対に入れない**:
 
-- Many port PRs are open at once. If each one edits `pitfalls.md`, they all conflict.
-- Port PRs are reviewed for test correctness. Mixing in doc changes dilutes that review.
+- 移植 PR は同時に何本も開いている。それぞれが `pitfalls.md` を編集すると、全部がコンフリクトする。
+- 移植 PR はテストの正しさをレビューする場。ドキュメントの変更が混ざると、そのレビューが薄まる。
 
-So knowledge accumulates on one **knowledge branch** with one long-lived draft PR. Each run adds commits to it.
+そのため、知見は1本の**知見ブランチ**に積み、長く開いたままのドラフト PR を1本だけ持つ。実行のたびにそこへコミットを足す。
 
-## Procedure
+## 手順
 
-1. **Pick the branch.**
-   - If `-k` was given, use it.
-   - Otherwise list the candidates with **both** `git branch -a --list '*<knowledge-pattern>*' --sort=-committerdate` **and** `git ls-remote --heads origin '*<knowledge-pattern>*'`. Without `ls-remote`, you miss branches pushed from other machines or sessions, and your push later fails as non-fast-forward. Exclude port branches (`port/*`, `*/port/*`). Ask the user which branch to use or what to name a new one.
-2. If the branch is checked out in another worktree (`git worktree list`), edit and commit there; `git switch` would fail.
-3. **Before switching, run `git status --porcelain -- <profile dir>`.** Uncommitted profile edits on the current branch would otherwise be carried over silently and committed onto the knowledge branch. Stash them away under a unique name first.
-4. Commit and push:
+1. **ブランチを決める。**
+   - `-k` が指定されていればそれを使う。
+   - なければ、候補を `git branch -a --list '*<知見ブランチのパターン>*' --sort=-committerdate` と `git ls-remote --heads origin '*<知見ブランチのパターン>*'` の**両方**で列挙する。`ls-remote` を落とすと、他のマシンやセッションが push したブランチを見落とし、後で push が非 fast-forward で失敗する。移植ブランチ（`port/*` と `*/port/*`）は候補から除く。どのブランチに積むか、または新しいブランチ名をユーザーに確認する。
+2. そのブランチが他の worktree でチェックアウト済みなら（`git worktree list`）、そちらで編集・コミットする。`git switch` は失敗する。
+3. **切り替える前に `git status --porcelain -- <プロファイルのディレクトリ>` を確認する。** 今のブランチにプロファイルの未コミット編集があると、切り替え後に黙って持ち越され、知見ブランチのコミットに混ざる。先に一意な名前を付けて退避しておく。
+4. コミットして push する:
 
    ```bash
-   git switch <knowledge-branch>                 # or: git switch -c <name> origin/<base>
-   # edit the profile files
-   git add <profile dir>
-   git commit -m "[skip ci] port-test: <summary of what was learned>"
-   git push -u origin <knowledge-branch>
-   git switch -                                  # back to the port branch
+   git switch <知見ブランチ>                     # 新規なら: git switch -c <name> origin/<base>
+   # プロファイルのファイルを編集する
+   git add <プロファイルのディレクトリ>
+   git commit -m "[skip ci] port-test: <分かったことの要約>"
+   git push -u origin <知見ブランチ>
+   git switch -                                  # 移植ブランチに戻る
    ```
 
-   - **Never force-push.** On a non-fast-forward rejection, stop and report; someone else may be stacking knowledge on the same branch.
-   - If push is blocked by permissions, stop at the commit and print the commands.
-5. If no open PR exists for the branch, create a draft one with a fixed title (`port-test: knowledge update`) and the knowledge label. If one exists, push only; do not rewrite its body.
+   - **force-push はしない。** 非 fast-forward で拒否されたら、報告して止める。他の誰かが同じブランチに知見を積んでいるかもしれない。
+   - push が権限でブロックされたら、コミットまでで止めてコマンドを提示する。
+5. そのブランチの PR が開いていなければ、固定のタイトル（`port-test: 知見更新`）と知見ラベルでドラフト PR を作る。既にあれば push だけにし、本文は書き換えない。
 
-## Versions: which knowledge does an agent read?
+## 版: エージェントはどの知見を読むのか
 
-New worktrees are created from `origin/<base>`, so **they do not contain unmerged knowledge**. The coordinator's own branch may be hundreds of commits behind. Before launching agents, compare the profile in three places: the current worktree, `origin/<base>`, and the knowledge branch. Choose the newest version, and patch in any section that exists only in one of the others. **Pass that version's absolute path to every agent.** In one batch this step was skipped, and every agent ran with knowledge that was missing 77 lines already on `origin/<base>`.
+新しい worktree は `origin/<base>` から作るので、**マージされていない知見を含まない。** コーディネータ自身のブランチが数百コミット遅れていることもある。エージェントを起動する前に、プロファイルを3か所で比べる: 今の worktree、`origin/<base>`、知見ブランチ。最新の版を選び、他の版にしか無い節があれば補う。**その版の絶対パスを全エージェントに渡す。** あるバッチではこの手順を飛ばしたため、`origin/<base>` に既に入っていた77行分を欠いた知見で、全エージェントが走った。

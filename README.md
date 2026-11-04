@@ -1,65 +1,75 @@
-# test-porter
+# blog-t2go-example
 
-Claude Code skills for porting a legacy test suite to a new language during a language migration. **One legacy test file → one reviewed draft PR**, and every port makes the next one more accurate.
+言語移行のときに、旧言語のテストを新言語のテストへ移植する Claude Code スキルです。ミラティブのテックブログで紹介した社内スキル `t2go` を、社外でも使える形に汎用化しました。**旧テスト1ファイルにつき、レビュー済みのドラフト PR を1本作ります。** 移植を重ねるほど、次の移植の精度が上がります。
 
-It grew out of a Perl → Go backend migration. There, 263 Perl feature test files were ported to Go E2E tests in about 9.5 weeks, in 251 PRs. In the two years before, the pace had been under two files a month. The workflow is language-agnostic. The knowledge is per project, and it ships with a Perl → Go starter pack.
+元になったのは Perl から Go へのバックエンド移行です。この移行では、Perl の feature テスト 263 ファイルを約 9.5 週間・251 PR で Go の E2E テストに移植しました（それまでの2年間は月2本未満のペースでした）。ワークフローは言語に依存しません。知見はプロジェクトごとに持つ設計で、Perl → Go の初期知見を同梱しています。
 
-[日本語版 README](README.ja.md)
-
-## What it does
+## 何をするか
 
 ```
-/port-test  <legacy test>            one file, with a plan approval gate
-/port-test-batch  <a> <b> ... -j 2   many files, one worktree + PR each, J in flight
+/port-test  <旧テスト>                 1ファイル。計画を承認してから実装する
+/port-test-batch  <a> <b> ... -j 2    複数ファイル。ファイルごとに worktree と PR を作り、J 本ずつ並列で進める
 ```
 
-| Phase | Work | Who |
+| Phase | 内容 | 担当 |
 |---|---|---|
-| 1 | Inventory every legacy case, classify it as port / merge / omit (with evidence), plan | session model |
-| 2–3 | Implement, run, fix until green and lint-clean | `port-test-implementer` (sonnet) |
-| 4 | Review: coverage, assertion strength, true comments | `port-test-reviewer` (opus, read-only) |
-| 5 | Delete the legacy file, inspect the diff, commit, draft PR, feed knowledge back | session model |
+| 1 | 旧テストのケースを全て洗い出し、移植 / 統合 / 省略（根拠付き）に分類して計画を立てる | セッションモデル |
+| 2–3 | 実装し、テストが通り lint が 0 件になるまで修正する | `port-test-implementer`（sonnet） |
+| 4 | カバレッジ・アサーションの強さ・コメントの正しさをレビューする | `port-test-reviewer`（opus・読み取り専用） |
+| 5 | 旧ファイルを削除し、差分を点検してコミットし、ドラフト PR を作って、知見を還元する | セッションモデル |
 
-Design points (details in [`principles.md`](skills/port-test/references/principles.md)):
+設計の要点（詳細は [`principles.md`](skills/port-test/references/principles.md)）:
 
-- **Workflow and knowledge are separate.** The skill is generic. Your project's knowledge lives in `.claude/test-porter/` in *your* repo, and each port adds to it via a separate knowledge branch and PR, so parallel port PRs never conflict.
-- **Each judgment goes to the model suited to it.** Planning and judgment use the session model, the volume of implementation work uses a cheaper model, and review uses a stronger model that has **no shell**. The coordinator feeds the reviewer the diff, test results and measured types.
-- **Tests must not get weaker.** The implementer cannot add omissions, weaken assertions or change production code. It reports instead. Every omission needs evidence that another test covers the case.
-- **Comments must be true.** In practice, the largest source of blocking review findings was wrong causal comments that pass CI. The reviewer is told to trace every stated cause.
+- **ワークフローと知見を分ける。** スキル本体は汎用です。プロジェクト固有の知見は、利用者のリポジトリの `.claude/port-test/` に置きます。移植のたびに別ブランチ・別 PR で知見を積むので、並走する移植 PR とはコンフリクトしません。
+- **判断ごとに適したモデルを使う。** 計画と判断はセッションモデル、量の多い実装は安価なモデル、レビューはシェルを持たない強いモデルが担当します。レビュアーには、差分・テスト結果・実測した型をコーディネータが渡します。
+- **テストを弱くしない。** 実装担当は、省略の追加・アサーションの弱化・本番コードの変更を自分で行わず、報告して戻ります。省略には「他のテストで担保済み」という根拠が必須です。
+- **コメントの正しさを担保する。** 実運用で最も多かった [must] 指摘は、CI を通ってしまう誤った因果コメントでした。レビュアーには、コメントに書かれた因果を実装まで追わせます。
 
-## Install
-
-As a plugin:
+## 構成
 
 ```
-/plugin marketplace add <owner>/test-porter
-/plugin install test-porter@test-porter
+.claude-plugin/        プラグイン / マーケットプレイスの定義
+skills/port-test/      単体実行のスキル本体
+  references/          言語非依存の原則・基本のレビュー観点・知見ループの手順
+  templates/           プロジェクトプロファイルの雛形（init で使う）
+skills/port-test-batch/  バッチ実行のコーディネータ
+agents/                planner / implementer / reviewer
+examples/perl-to-go/   Perl → Go の初期知見
 ```
 
-Commands are then `/test-porter:port-test` and `/test-porter:port-test-batch`.
+## インストール
 
-Or copy `skills/*` into `.claude/skills/` and `agents/*` into `.claude/agents/` of your repository.
-
-## Set up your project
+プラグインとして入れる場合:
 
 ```
-/test-porter:port-test init
+/plugin marketplace add <owner>/blog-t2go-example
+/plugin install blog-t2go-example@blog-t2go-example
 ```
 
-This scaffolds `.claude/test-porter/` (profile, conversion map, pitfalls, test execution, review checklist, PR template). If you are migrating Perl → Go, seed the knowledge files from [`examples/perl-to-go/`](examples/perl-to-go/).
+コマンドは `/blog-t2go-example:port-test` と `/blog-t2go-example:port-test-batch` になります。
 
-Recommended start:
+または、`skills/*` をリポジトリの `.claude/skills/` に、`agents/*` を `.claude/agents/` にコピーしても使えます。この場合のコマンドは `/port-test` と `/port-test-batch` です。
 
-1. Fill in `profile.md`, especially **how to tell whether a component is still legacy or already migrated**. This decides which helper a port calls.
-2. Port 2–4 files with close supervision. Mine their human review comments into `conversion-map.md` and `review-checklist.md`.
-3. Use the single-file skill until the knowledge base stops growing quickly, then switch to batch mode with `-j 1`, then `-j 2`.
+## プロジェクトへの導入
 
-## Requirements
+```
+/blog-t2go-example:port-test init
+```
 
-- Claude Code with subagents. Without them, the skill runs every phase in the main session.
-- `git` with worktrees (batch mode) and `gh` (PR creation). If push is not allowed, the skill stops at the commit and prints the commands.
-- A new test suite that can run against the system the legacy tests exercised, with isolation between parallel runs if you use `-j` > 1.
+`.claude/port-test/` にプロファイルの雛形（プロファイル・対応表・落とし穴集・テスト実行・レビュー観点・PR テンプレート）を作ります。Perl → Go の移行なら、[`examples/perl-to-go/`](examples/perl-to-go/) を知見の初期値にできます。
 
-## License
+おすすめの始め方:
+
+1. `profile.md` を埋めます。特に「**依存先がまだ旧実装か、移行済みか**」の判定方法が重要です。どのヘルパを呼ぶかがこれで決まります。
+2. 最初の 2〜4 ファイルは人がよく見ながら移植し、人間のレビュー指摘を `conversion-map.md` と `review-checklist.md` に起こします。
+3. 知見の増え方が落ち着くまでは単体実行を使い、その後バッチ実行に移ります（`-j 1` から始めて `-j 2` へ）。
+
+## 必要なもの
+
+- サブエージェントが使える Claude Code（使えない環境では、全フェーズをメインセッションで実行します）
+- `git`（バッチ実行では worktree を使います）と `gh`（PR 作成に使います）。push が許可されていない環境では、コミットまでで止めて実行すべきコマンドを提示します
+- 旧テストが検証していたシステムに対して実行できる新テストスイート。`-j` を 2 以上にするなら、並列実行どうしの分離も必要です
+
+## ライセンス
 
 MIT
