@@ -46,4 +46,4 @@ go tool golangci-lint run ./...     # lint
 
 ## ライセンス
 
-MIT
+[The Unlicense](UNLICENSE)
