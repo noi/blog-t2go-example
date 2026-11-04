@@ -31,7 +31,7 @@
 - PR ラベル: `port`        知見 PR のラベル: `port-knowledge`
 - 知見ブランチ名のパターン: `*port-knowledge*`
 - 新しい worktree にコピーする未追跡ファイル: なし（Perl の依存は `cpanm -L local --installdeps .` で入れる）
-- push: このリポジトリにはリモートが無いので、コミットまでで止める
+- push: サンプルなので push と PR 作成はせず、コミットまでで止める
 
 ## バッチの知見
 
