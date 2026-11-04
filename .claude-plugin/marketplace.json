@@ -5,7 +5,7 @@
     {
       "name": "blog-t2go-example",
       "source": "./",
-      "description": "言語移行で旧テストを新言語のテストへ移植するスキル。"
+      "description": "言語移植で旧テストを新言語のテストへ移植するスキル。"
     }
   ]
 }
