@@ -1,6 +1,0 @@
-{
-  "name": "blog-t2go-example",
-  "description": "言語移植（例: Perl → Go）で旧テストを新言語のテストへ移植するスキル。1ファイル1ドラフトPR、知見が自己増殖する。",
-  "version": "0.1.0",
-  "license": "MIT"
-}

@@ -1,74 +1,48 @@
 # blog-t2go-example
 
-言語移植のときに、旧言語のテストを新言語のテストへ移植する Claude Code スキルです。ミラティブのテックブログで紹介した社内スキル `t2go` を、社外でも使える形に汎用化しました。**旧テスト1ファイルにつき、レビュー済みのドラフト PR を1本作ります。** 移植を重ねるほど、次の移植の精度が上がります。
+ミラティブのテックブログ記事で紹介した、Perl → Go のテスト移植スキル `t2go` のサンプルリポジトリです。社内版からリポジトリ固有の部分を取り除いたスキルと、それを実際に動かすための小さな題材を置いています。
 
-元になったのは Perl から Go へのバックエンド移植です。この移植では、Perl の feature テスト 250 ファイルを約 9.5 週間で Go の E2E テストに移植しました。ワークフローは言語に依存しません。知見はプロジェクトごとに持つ設計で、Perl → Go の初期知見を同梱しています。
-
-## 何をするか
-
-```
-/port-test  <旧テスト>                 1ファイル。計画を承認してから実装する
-/port-test-batch  <a> <b> ... -j 2    複数ファイル。ファイルごとに worktree と PR を作り、J 本ずつ並列で進める
-```
-
-| Phase | 内容 | 担当 |
-|---|---|---|
-| 1 | 旧テストのケースを全て洗い出し、移植 / 統合 / 省略（根拠付き）に分類して計画を立てる | セッションモデル |
-| 2–3 | 実装し、テストが通り lint が 0 件になるまで修正する | `port-test-implementer`（sonnet） |
-| 4 | カバレッジ・アサーションの強さ・コメントの正しさをレビューする | `port-test-reviewer`（opus・読み取り専用） |
-| 5 | 旧ファイルを削除し、差分を点検してコミットし、ドラフト PR を作って、知見を還元する | セッションモデル |
-
-設計の要点（詳細は [`principles.md`](skills/port-test/references/principles.md)）:
-
-- **ワークフローと知見を分ける。** スキル本体は汎用です。プロジェクト固有の知見は、利用者のリポジトリの `.claude/port-test/` に置きます。移植のたびに別ブランチ・別 PR で知見を積むので、並走する移植 PR とはコンフリクトしません。
-- **判断ごとに適したモデルを使う。** 計画と判断はセッションモデル、量の多い実装は安価なモデル、レビューはシェルを持たない強いモデルが担当します。レビュアーには、差分・テスト結果・実測した型をコーディネータが渡します。
-- **テストを弱くしない。** 実装担当は、省略の追加・アサーションの弱化・本番コードの変更を自分で行わず、報告して戻ります。省略には「他のテストで担保済み」という根拠が必須です。
-- **コメントの正しさを担保する。** 実運用で最も多かった [must] 指摘は、CI を通ってしまう誤った因果コメントでした。レビュアーには、コメントに書かれた因果を実装まで追わせます。
+配布して使ってもらうことは想定していません。記事で説明した設計を、実際のファイルとして読めるようにするためのものです。
 
 ## 構成
 
 ```
-.claude-plugin/        プラグイン / マーケットプレイスの定義
-skills/port-test/      単体実行のスキル本体
-  references/          言語非依存の原則・基本のレビュー観点・知見ループの手順
-  templates/           プロジェクトプロファイルの雛形（init で使う）
-skills/port-test-batch/  バッチ実行のコーディネータ
-agents/                planner / implementer / reviewer
-examples/perl-to-go/   Perl → Go の初期知見
+.claude/
+  skills/port-test/        スキル本体（1ファイルを移植する）
+    references/            言語非依存の原則・基本のレビュー観点・知見ループの手順
+    templates/             プロジェクトプロファイルの雛形
+  skills/port-test-batch/  複数ファイルを並列で移植するコーディネータ
+  agents/                  planner / implementer / reviewer
+  port-test/               このリポジトリ用のプロファイル（対応表・落とし穴集など）
+internal/todo/             題材の TODO API（Go に移植済み）
+t/feature/                 移植前の Perl E2E テスト
+tests/                     移植後の Go E2E テスト
+script/prove.sh            Perl のテストを API サーバーに対して実行する
 ```
 
-## インストール
+## 題材
 
-プラグインとして入れる場合:
+`internal/todo` の TODO API は Go に移植済みで、それを検証する E2E テストだけが Perl（`t/feature/todo.t`）のまま残っている、という状況を再現しています。API は旧実装の流儀を引き継ぎ、エラーでも HTTP 200 で本文の `status.ok` を 0 にして返します。
+
+`t/feature/todo.t` には、本番の移植で実際に遭遇したパターンを再現して仕込んでいます。
+
+- `ignore` の後のカンマ抜けで、後続のフィールドが検証されていない subtest
+- 削除済みのエンドポイントが 404 を返すことだけを確かめている subtest
+
+## 動かし方
+
+```bash
+cpanm -L local --installdeps .     # Perl の依存（Test::Deep）
+./script/prove.sh                   # 移植前の Perl テスト
+go test ./...                       # Go のテスト
+go tool golangci-lint run ./...     # lint
+```
+
+このリポジトリで Claude Code を起動し、スキルを実行します。
 
 ```
-/plugin marketplace add <owner>/blog-t2go-example
-/plugin install blog-t2go-example@blog-t2go-example
+/port-test t/feature/todo.t
 ```
-
-コマンドは `/blog-t2go-example:port-test` と `/blog-t2go-example:port-test-batch` になります。
-
-または、`skills/*` をリポジトリの `.claude/skills/` に、`agents/*` を `.claude/agents/` にコピーしても使えます。この場合のコマンドは `/port-test` と `/port-test-batch` です。
-
-## プロジェクトへの導入
-
-```
-/blog-t2go-example:port-test init
-```
-
-`.claude/port-test/` にプロファイルの雛形（プロファイル・対応表・落とし穴集・テスト実行・レビュー観点・PR テンプレート）を作ります。Perl → Go の移植なら、[`examples/perl-to-go/`](examples/perl-to-go/) を知見の初期値にできます。
-
-おすすめの始め方:
-
-1. `profile.md` を埋めます。特に「**依存先がまだ旧実装か、移植済みか**」の判定方法が重要です。どのヘルパを呼ぶかがこれで決まります。
-2. 最初の 2〜4 ファイルは人がよく見ながら移植し、人間のレビュー指摘を `conversion-map.md` と `review-checklist.md` に起こします。
-3. 知見の増え方が落ち着くまでは単体実行を使い、その後バッチ実行に移ります（`-j 1` から始めて `-j 2` へ）。
-
-## 必要なもの
-
-- サブエージェントが使える Claude Code（使えない環境では、全フェーズをメインセッションで実行します）
-- `git`（バッチ実行では worktree を使います）と `gh`（PR 作成に使います）。push が許可されていない環境では、コミットまでで止めて実行すべきコマンドを提示します
-- 旧テストが検証していたシステムに対して実行できる新テストスイート。`-j` を 2 以上にするなら、並列実行どうしの分離も必要です
 
 ## ライセンス
 

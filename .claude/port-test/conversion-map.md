@@ -1,8 +1,35 @@
-# 変換対応表: Perl（Test::More / Test::Deep）→ Go（testing / testify / gjson）
+# 変換対応表
 
-プロジェクトの `conversion-map.md` の初期値。扱うのは言語レベル・ライブラリレベルの対応だけ。プロジェクトのヘルパ（テストサーバー・factory・旧スタックへのブリッジ）は各プロジェクトで足す。
+このリポジトリの旧→新の対応。前半がプロジェクト固有、後半が Perl → Go の一般的な対応。
 
-## テストの構造
+## プロジェクトのヘルパ
+
+| Perl（`t/lib/TestUtil.pm`） | Go（`tests/testutil`） | 備考 |
+|---|---|---|
+| `create_user()` | `s.CreateUser()` | どちらもテスト内で一意なユーザー ID を作るだけ。サーバー側の状態は作らない |
+| `api_post($user, $path, $params)` | `user.Post(t, path, params)` | Go 側は HTTP 200 を `require` してから本文（JSON 文字列）を返す |
+| `api_get($user, $path)` | `user.Get(t, path)` | 同上 |
+| 戻り値 `{ http_status => N }`（200 以外） | （対応なし） | Go のヘルパは 200 以外で即失敗する。200 以外を検証したいテストは、まず移植の要否を判断する |
+
+## アサーション規約
+
+- API はエラーでも HTTP 200 で、本文の `status.ok` が 0 になる。他にレスポンスを検証しない呼び出しでは `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())` を置く
+- エラーを期待する呼び出しは `status.ok` = 0 と `status.error` の文言の両方を検証する
+
+## ファイル配置
+
+- 新しい移植: `tests/<name>/<name>_test.go`（`package <name>_test`）に新規パッケージを作る
+- 既存ファイルへの追記はしない
+
+## 参照すべき先例
+
+- `tests/me/me_test.go`: `NewServer` → `CreateUser` → `Get` → `status.ok` の fatal ガード、の最小形
+
+## Perl → Go の一般的な対応
+
+実際の Perl → Go のテスト移植で得た、言語レベル・ライブラリレベルの対応。
+
+### テストの構造
 
 | Perl | Go | 備考 |
 |---|---|---|
@@ -11,7 +38,7 @@
 | `local $ENV{...}` / `mock_guard` のスコープ | セットアップ + `t.Cleanup` | mock のスコープは観測の窓になる。「mock」の節を参照 |
 | subtest ごとの DB リセット | `t.Run` ごとにリセットされるとは**限らない** | 新基盤がフィクスチャをテスト単位で1回だけ読むなら、全 subtest の行が共存する。データかフィクスチャのディレクトリを分ける |
 
-## アサーション
+### アサーション
 
 | Perl | Go | 備考 |
 |---|---|---|
@@ -27,7 +54,7 @@
 | `like $x, qr/.../` | `assert.Regexp` か完全一致 | 正規表現が分岐を区別できているか確認する。共通の接頭辞だけでは何も証明しない |
 | `dies_ok` / `throws_ok` | `require.Error` + エラーの型/メッセージ | |
 
-## レスポンス（JSON）
+### レスポンス（JSON）
 
 - Perl の API はエラーでも **HTTP 200 で本文中にステータス**（`status.ok = 0`）を返すことが多い。HTTP コードだけでなく本文のステータスも見る。
 - 他にレスポンスを検証しない呼び出しでは、成功フラグを **fatal で**アサートする: `require.EqualValues(t, 1, gjson.Get(res, "status.ok").Int())`。
@@ -38,7 +65,7 @@
   - `gjson.Result` は 80 バイトで、gocritic の `hugeParam` は 80 以上で発火する。ヘルパにはポインタで渡す。
 - レスポンスから取り出した ID は、使う前に `require.NotEmpty` でガードする。パースに失敗すると 0 が返り、多くの factory は 0 を「新しく作る」と解釈する。
 
-## mock → 実際の作用
+### mock → 実際の作用
 
 | Perl のパターン | Go |
 |---|---|
@@ -46,7 +73,7 @@
 | push / logger の mock | テスト環境に実際の受け先があればそれを読む |
 | `dequeue(sub { is undef, shift })` | 注意: キューが**空だとコールバックを呼ばない**ヘルパがある。その場合、直後の `cmp_deeply $row` は前回の行を再比較している。drain して数える形に置き換える |
 
-## 時刻
+### 時刻
 
 | Perl | Go | 備考 |
 |---|---|---|
@@ -54,7 +81,7 @@
 | ヘルパ内の `my $time = time;` | — | 外側の `$time` を**シャドーイング**するだけで進めない。Go のヘルパに「新しい時刻」を返させて次のフェーズの起点にしない |
 | `Sub::Retry::retry($times, $delay, \&code, \&retry_if)` | テスト goroutine 内の deadline ループ | 3番目が実行対象、4番目が継続判定。条件が `t.Fatal` しうるなら `require.Eventually` は使わない（落とし穴を参照） |
 
-## エンコーディング
+### エンコーディング
 
 - Perl のテストファイルには普通 `use utf8;` がある。Go のブリッジが実行する生成 Perl スニペットには**無いことが多い**。無いと、非 ASCII のリテラルはバイト列になる:
   - DB に書いた値が二重エンコードされる。
@@ -62,11 +89,11 @@
 - `binmode STDOUT, ':utf8'` なしで非 ASCII を `print` すると「Wide character」警告が出て、UTF-8 の出力が保証されない。
 - JSON のレスポンスは `\uXXXX` エスケープを含むことがあり、生の本文に非 ASCII のテキストを当てても失敗する。先に JSON をデコードする。
 
-## 生成 Perl に埋め込む文字列
+### 生成 Perl に埋め込む文字列
 
 値は**シングルクォート**にする。ダブルクォートの中では `@x` と `$x` が展開され、未定義の変数は黙って空文字になる。ダブルクォートや `join` は `\n` / `\r\n` が必要な箇所だけで使う。
 
-## 決定性
+### 決定性
 
 - Perl のハッシュ順序はプロセスごとにランダム化される。factory がハッシュを反復して入れた行に対し、`ORDER BY` なしの `SELECT ... LIMIT 1` をするリポジトリのコードは非決定になる。行を一意にするか、同じ内容に揃える。
 - Go の `map` の反復順もランダム。順序を前提にしない。
